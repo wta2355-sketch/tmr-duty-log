@@ -310,12 +310,12 @@ function makeDemo(){
     const base={f1:{s:"무",a:""},f2:{s:"무",a:""},f3:{s:"무",a:""},f4:{s:"무",a:""},f5:{s:"무",a:""},s1:{s:"무",a:""},s2:{s:"무",a:""},s3:{s:"무",a:""},s4:{s:"무",a:""}};
     const d2=ds(2),d1=ds(1);
     store={dutyLogs:{
-      [d2]:{log:{date:d2,worker:"예시 근무자A",start:"18:30",end:"22:00",checks:base,issues:0,notes:"(예시) 22:50 생산 종료, 특이사항 없음",updatedAt:iso(d2,23,5)},
+      [d2]:{log:{date:d2,worker:"예시 근무자A",start:"18:30",end:"22:00",checks:base,issues:0,notes:"(예시) 21:50 생산 종료, 특이사항 없음",updatedAt:iso(d2,22,5)},
             review:{manager:{name:"예시 공장장",instruction:"(예시) 야적장 배수로 낙엽 정리 바랍니다.",at:iso(d1,8,40)},
                     director:{name:"예시 본부장",instruction:"",at:iso(d1,10,15)}}},
       [d1]:{log:{date:d1,worker:"예시 근무자B",start:"18:30",end:"22:00",
             checks:{...base,f2:{s:"유",a:"(예시) 2호 믹서실 형광등 1개 깜빡임 → 전원 차단, 공장장 보고"}},issues:1,
-            notes:"(예시) 22:20 생산 종료",updatedAt:iso(d1,22,40)}}
+            notes:"(예시) 21:40 생산 종료",updatedAt:iso(d1,21,55)}}
     }};
   }
   const persist=()=>{try{localStorage.setItem(KEY,JSON.stringify(store))}catch(e){}};
