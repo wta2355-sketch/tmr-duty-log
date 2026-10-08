@@ -1,0 +1,27 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "dutyLogs": {
+      ".read": "auth != null && (auth.token.email === 'duty@gjtmr.local' || auth.token.email === 'manager@gjtmr.local' || auth.token.email === 'director@gjtmr.local')",
+      "$date": {
+        "log": {
+          ".write": "auth != null && auth.token.email === 'duty@gjtmr.local' && $date.matches(/^\\d{4}-\\d{2}-\\d{2}$/) && !data.parent().child('review/manager').exists()",
+          ".validate": "newData.child('date').val() === $date && newData.child('worker').isString() && newData.child('worker').val().length > 0"
+        },
+        "review": {
+          "manager": {
+            ".write": "auth != null && auth.token.email === 'manager@gjtmr.local' && data.parent().parent().child('log').exists() && !data.parent().child('director').exists()",
+            ".validate": "newData.hasChildren(['name', 'at', 'sig']) && newData.child('sig').isString() && newData.child('sig').val().beginsWith('data:image/png;base64,') && newData.child('sig').val().length < 80000"
+          },
+          "director": {
+            ".write": "auth != null && auth.token.email === 'director@gjtmr.local' && data.parent().child('manager').exists()",
+            ".validate": "newData.hasChildren(['name', 'at', 'sig']) && newData.child('sig').isString() && newData.child('sig').val().beginsWith('data:image/png;base64,') && newData.child('sig').val().length < 80000"
+          },
+          "$other": { ".write": false }
+        },
+        "$other": { ".write": false }
+      }
+    }
+  }
+}
