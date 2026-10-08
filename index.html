@@ -231,6 +231,11 @@ textarea.notes{min-height:110px;resize:vertical}
       <div class="pad"><textarea id="notes" class="notes lf" placeholder="예) 22:40 생산 종료, 2호 믹서 소음 확인 → 내일 오전 공장장 보고"></textarea></div>
     </section>
 
+    <section class="block" id="workerSigBlock">
+      <div class="block-h"><h2>근무자 서명</h2><span class="sub" id="workerSigSub">저장 전에 서명하세요</span></div>
+      <div class="pad" id="workerSig"></div>
+    </section>
+
     <section class="block" id="reviewBlock">
       <div class="block-h"><h2>지시사항 · 결재</h2><span class="sub">공장장 결재 후 본부장 결재</span></div>
       <div class="review">
@@ -482,8 +487,8 @@ function renderReview(){
 }
 /* 서명 패드: 획을 0~1 좌표로 보관해 화면이 다시 그려져도 유지 */
 const sigStrokes={};
-function makeSigPad(r){
-  const key=r+"-"+(cur?.log?.date||"");
+function makeSigPad(r,dateKey,onInk){
+  const key=r+"-"+(dateKey ?? cur?.log?.date ?? "");
   if(!sigStrokes[key]) sigStrokes[key]=[];
   const strokes=sigStrokes[key];
   const wrap=document.createElement("div");wrap.className="sigpad";
@@ -499,7 +504,7 @@ function makeSigPad(r){
     for(const s of strokes){g.beginPath();s.forEach(([x,y],i)=>i?g.lineTo(x*w,y*h):g.moveTo(x*w,y*h));if(s.length===1)g.lineTo(s[0][0]*w+0.1,s[0][1]*h);g.stroke()}}
   let drawing=null;
   const pt=e=>{const b=c.getBoundingClientRect();return[(e.clientX-b.left)/b.width,(e.clientY-b.top)/b.height]};
-  c.addEventListener("pointerdown",e=>{e.preventDefault();c.setPointerCapture(e.pointerId);drawing=[pt(e)];strokes.push(drawing);draw()});
+  c.addEventListener("pointerdown",e=>{e.preventDefault();c.setPointerCapture(e.pointerId);drawing=[pt(e)];strokes.push(drawing);draw();onInk&&onInk()});
   c.addEventListener("pointermove",e=>{if(!drawing)return;e.preventDefault();drawing.push(pt(e));draw()});
   const end=()=>{drawing=null};
   c.addEventListener("pointerup",end);c.addEventListener("pointercancel",end);
@@ -507,9 +512,39 @@ function makeSigPad(r){
   window.addEventListener("resize",()=>{if(c.isConnected)size()});
   return {wrap,el:c,
     hasInk:()=>strokes.some(s=>s.length>2)||strokes.length>2,
-    clear:()=>{strokes.length=0;draw()},
+    clear:()=>{strokes.length=0;draw();onInk&&onInk()},
     toDataURL:()=>{const o=document.createElement("canvas");o.width=360;o.height=140;paint(o.getContext("2d"),360,140,"#111");return o.toDataURL("image/png")},
     reset:()=>{delete sigStrokes[key]}};
+}
+/* 근무자 서명란 */
+let workerPad=null, resign=false;
+function renderWorkerSig(){
+  const host=$("workerSig");host.textContent="";workerPad=null;
+  const log=cur?.log, date=$("date").value;
+  const canEdit = role==="worker" && !cur?.review?.manager;
+  $("workerSigSub").textContent = canEdit ? "저장 전에 서명하세요" : "";
+  if(log?.sig && !(canEdit && resign)){
+    const sb=document.createElement("div");sb.className="sigview";
+    const im=document.createElement("img");im.src=log.sig;im.alt="근무자 서명";sb.appendChild(im);
+    const meta=document.createElement("div");meta.className="meta";meta.style.cssText="font-family:var(--f-mono);font-size:12px;color:var(--muted);margin-top:6px";
+    meta.textContent=`${log.worker||"근무자"} · ${fmt(log.updatedAt)} 서명`;
+    host.append(sb,meta);
+    if(canEdit){
+      const b=document.createElement("button");b.className="btn small";b.style.marginTop="8px";b.textContent="서명 다시 하기";
+      b.addEventListener("click",()=>{resign=true;renderWorkerSig()});host.appendChild(b);
+    }
+  }else if(canEdit){
+    const pad=makeSigPad("worker",date,dirty);workerPad=pad;
+    const btns=document.createElement("div");btns.className="btns";btns.style.cssText="display:flex;gap:8px;margin-top:8px";
+    const clr=document.createElement("button");clr.className="btn small";clr.textContent="서명 지우기";
+    clr.addEventListener("click",()=>pad.clear());
+    btns.appendChild(clr);
+    if(log?.sig){const cancel=document.createElement("button");cancel.className="btn small";cancel.textContent="기존 서명 유지";
+      cancel.addEventListener("click",()=>{pad.clear();pad.reset();resign=false;renderWorkerSig()});btns.appendChild(cancel)}
+    host.append(pad.wrap,btns);
+  }else{
+    const s=document.createElement("div");s.className="sub";s.textContent=log?"서명 없음":"아직 작성된 일지가 없습니다.";host.appendChild(s);
+  }
 }
 async function review(r,data){
   const date=cur?.log?.date;if(!date)return;
@@ -531,7 +566,7 @@ function openDate(date){
   $("weekday").textContent=weekday(date);
   $("delConfirm").hidden=true;
   if(curRef) curRef.off();
-  cur=null;isDirty=false;
+  cur=null;isDirty=false;resign=false;
   setStatus("불러오는 중…");
   curRef=db.ref(`${ROOT}/${date}`);
   let first=true;
@@ -554,6 +589,7 @@ function openDate(date){
       setStatus(log?"":"이 날짜에는 아직 일지가 없습니다");
     }
     renderReview();
+    renderWorkerSig();
     first=false;
   },()=>setStatus("불러오지 못했습니다. 다시 로그인하세요."));
 }
@@ -564,10 +600,13 @@ async function save(){
   if(!data.worker){setStatus("근무자 이름을 입력하세요");$("worker").focus();return}
   const miss=ALL.find(it=>data.checks[it.k].s==="유"&&!data.checks[it.k].a);
   if(miss){setStatus(`‘${miss.t}’ 조치사항을 입력하세요`);$("act-"+miss.k).focus();return}
+  data.sig = (workerPad && workerPad.hasInk()) ? workerPad.toDataURL() : (cur?.log?.sig || "");
+  if(!data.sig){setStatus("근무자 서명란에 서명한 뒤 저장하세요");$("workerSigBlock").scrollIntoView({behavior:"smooth",block:"center"});return}
   $("saveBtn").disabled=true;setStatus("저장 중…");
   try{
     await db.ref(`${ROOT}/${data.date}/log`).set(data);
     isDirty=false;lsSet("dutyDraft",null);
+    delete sigStrokes["worker-"+data.date];resign=false;renderWorkerSig();
     setStatus(`${data.date} 일지를 저장했습니다`);
   }catch(e){
     setStatus(e?.code==="PERMISSION_DENIED"?"결재가 끝난 일지이거나 저장 권한이 없습니다.":"저장하지 못했습니다. 연결을 확인하고 다시 누르세요.");
@@ -575,7 +614,7 @@ async function save(){
 }
 async function del(){
   const date=$("date").value;$("delConfirm").hidden=true;
-  try{await db.ref(`${ROOT}/${date}/log`).remove();lsSet("dutyDraft",null);isDirty=false;fillLog(null);setStatus(`${date} 일지를 삭제했습니다`)}
+  try{await db.ref(`${ROOT}/${date}/log`).remove();lsSet("dutyDraft",null);isDirty=false;fillLog(null);delete sigStrokes["worker-"+date];setStatus(`${date} 일지를 삭제했습니다`)}
   catch(e){setStatus("삭제하지 못했습니다.")}
 }
 
