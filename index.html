@@ -30,9 +30,8 @@ const ACCOUNTS = {
   manager:  "manager@gjtmr.local",   // 공장장
   director: "director@gjtmr.local"   // 본부장
 };
-// 화면에서 입력한 비밀번호 뒤에 이 글자를 붙여 Firebase로 보냅니다(6자 제한 대응).
-// 예) 화면 입력 0000 → Firebase 비밀번호 0000-tmr
-const PW_SUFFIX = "-tmr";
+// 화면에서 입력한 비밀번호가 그대로 Firebase 비밀번호로 쓰입니다(6자 이상).
+const PW_SUFFIX = "";
 </script>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
