@@ -95,6 +95,10 @@ input:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px soli
 .rbar label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);font-weight:500}
 .rbar input[type=time]{width:auto;padding:6px 8px;font-size:15px}
 .rbar .sp{flex:1}
+.etc{padding:12px 16px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+.etc b{font-weight:600}
+.etc small{color:var(--muted);font-size:12.5px}
+.etc textarea{min-height:64px;resize:vertical}
 .round .block-h h2 .n{font-family:var(--f-mono);color:var(--accent);margin-right:6px}
 .item.issue{background:var(--warn-soft)}
 .item .act textarea{min-height:60px;resize:vertical}
@@ -319,7 +323,7 @@ function makeDemo(){
   if(!store){
     const t=new Date();const ds=n=>{const x=new Date(t);x.setDate(x.getDate()-n);x.setMinutes(x.getMinutes()-x.getTimezoneOffset());return x.toISOString().slice(0,10)};
     const base=Object.fromEntries(ALL.map(it=>[it.k,{s:"무",a:""}]));
-    const rt={r1:{time:"19:25"},r2:{time:"20:50"},r3:{time:"21:55"}};
+    const rt={r1:{time:"19:25"},r2:{time:"20:50",etc:"(예시) 사료 운반차량 20:40 출차 확인"},r3:{time:"21:55"}};
     const fakeSig=seed=>{const c=document.createElement("canvas");c.width=360;c.height=140;const g=c.getContext("2d");
       g.strokeStyle="#111";g.lineWidth=2.6;g.lineCap="round";g.beginPath();g.moveTo(40,95);
       for(let i=1;i<=14;i++)g.lineTo(40+i*18,95-Math.abs(Math.sin(i*seed))*45);g.stroke();return c.toDataURL("image/png")};
@@ -431,6 +435,11 @@ function buildItems(){
       row.querySelector("textarea").addEventListener("input",dirty);
       g.appendChild(row);
     });
+    const etc=document.createElement("div");etc.className="etc";
+    etc.innerHTML=`<div><b>기타</b> <small>위 항목 외 확인한 내용을 자유롭게 기록 (선택)</small></div>
+      <textarea id="etc-${R.r}" class="lf" placeholder="예) 2호 호퍼 주변 원료 흘림 정리함 / 외부 업체 차량 20:10 출차"></textarea>`;
+    g.after(etc);
+    etc.querySelector("textarea").addEventListener("input",dirty);
     sec.querySelector("[data-now]").addEventListener("click",()=>{$("rt-"+R.r).value=nowHM();updateRound(R.r);dirty()});
     sec.querySelector("[data-allok]").addEventListener("click",()=>{
       R.items.forEach(it=>{if(!getState(it.k))setState(it.k,"무")});stampRound(R.r);updateRound(R.r);dirty()});
@@ -465,7 +474,9 @@ function collectLog(){
   const checks={};let issues=0;
   for(const it of ALL){const s=getState(it.k);if(!s)continue;const a=$("act-"+it.k).value.trim();checks[it.k]={s,a:s==="유"?a:""};if(s==="유")issues++}
   const rounds={};let roundsDone=0;
-  for(const R of ROUNDS){const t=$("rt-"+R.r).value;if(t)rounds[R.r]={time:t};if(roundInfo(R,checks,t).complete)roundsDone++}
+  for(const R of ROUNDS){const t=$("rt-"+R.r).value, e=$("etc-"+R.r).value.trim();
+    if(t||e){rounds[R.r]={};if(t)rounds[R.r].time=t;if(e)rounds[R.r].etc=e}
+    if(roundInfo(R,checks,t).complete)roundsDone++}
   return {date:$("date").value, worker:$("worker").value.trim(), start:$("start").value, end:$("end").value,
     checks, rounds, roundsDone, issues, notes:$("notes").value.trim(), updatedAt:new Date().toISOString()};
 }
@@ -474,7 +485,7 @@ function fillLog(d){
   $("start").value=d?.start||"19:00";
   $("end").value=d?.end||"22:00";
   for(const it of ALL){const c=d?.checks?.[it.k];setState(it.k,c?.s||"");$("act-"+it.k).value=c?.a||""}
-  for(const R of ROUNDS){$("rt-"+R.r).value=d?.rounds?.[R.r]?.time||"";updateRound(R.r)}
+  for(const R of ROUNDS){$("rt-"+R.r).value=d?.rounds?.[R.r]?.time||"";$("etc-"+R.r).value=d?.rounds?.[R.r]?.etc||"";updateRound(R.r)}
   $("notes").value=d?.notes||"";
 }
 function dirty(){
@@ -723,7 +734,8 @@ function renderList(){
     const w=document.createElement("span");w.className="w";w.textContent=`${L.worker||"—"}  ${L.start||""}~${L.end||""}`;
     const sm=document.createElement("small");
     const probs=ALL.filter(it=>L.checks?.[it.k]?.s==="유").map(it=>it.n+" "+it.t);
-    sm.textContent=probs.length?probs.join(", "):(L.notes||"특이사항 없음");w.appendChild(sm);
+    const etcs=ROUNDS.filter(R=>L.rounds?.[R.r]?.etc).map(R=>R.n+" 기타: "+L.rounds[R.r].etc);
+    sm.textContent=probs.length?probs.join(", "):(etcs[0]||L.notes||"특이사항 없음");w.appendChild(sm);
     const right=document.createElement("span");right.className="right";
     const p=document.createElement("span");p.className="pill "+(L.issues?"warn":"ok");p.textContent=L.issues?`이상 ${L.issues}`:"이상 없음";
     const rd=L.roundsDone??0;
@@ -740,11 +752,11 @@ function renderList(){
 function exportCsv(){
   const m=$("month").value;
   const list=[...monthRecords].sort((a,b)=>a.date.localeCompare(b.date));
-  const head=["근무일자","요일","근무자","시작","종료",...ROUNDS.map(R=>R.n+" 점검시각"),...ALL.map(i=>i.n+" "+i.t),...ALL.map(i=>i.n+" "+i.t+" 조치"),"특이사항","공장장","공장장 결재시각","공장장 지시사항","본부장","본부장 결재시각","본부장 지시사항"];
+  const head=["근무일자","요일","근무자","시작","종료",...ROUNDS.map(R=>R.n+" 점검시각"),...ALL.map(i=>i.n+" "+i.t),...ALL.map(i=>i.n+" "+i.t+" 조치"),...ROUNDS.map(R=>R.n+" 기타"),"특이사항","공장장","공장장 결재시각","공장장 지시사항","본부장","본부장 결재시각","본부장 지시사항"];
   const esc=v=>`"${String(v??"").replace(/"/g,'""')}"`;
   const lines=[head.map(esc).join(",")];
   for(const r of list){const L=r.log,M=r.review?.manager||{},D=r.review?.director||{};
-    lines.push([r.date,weekday(r.date),L.worker,L.start,L.end,...ROUNDS.map(R=>L.rounds?.[R.r]?.time||""),...ALL.map(i=>L.checks?.[i.k]?.s||""),...ALL.map(i=>L.checks?.[i.k]?.a||""),L.notes,M.name,fmt(M.at),M.instruction,D.name,fmt(D.at),D.instruction].map(esc).join(","))}
+    lines.push([r.date,weekday(r.date),L.worker,L.start,L.end,...ROUNDS.map(R=>L.rounds?.[R.r]?.time||""),...ALL.map(i=>L.checks?.[i.k]?.s||""),...ALL.map(i=>L.checks?.[i.k]?.a||""),...ROUNDS.map(R=>L.rounds?.[R.r]?.etc||""),L.notes,M.name,fmt(M.at),M.instruction,D.name,fmt(D.at),D.instruction].map(esc).join(","))}
   const blob=new Blob(["﻿"+lines.join("\r\n")],{type:"text/csv;charset=utf-8"});
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`당직일지_${m}.csv`;
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
