@@ -193,6 +193,44 @@ textarea.notes{min-height:110px;resize:vertical}
 .viewer button{position:absolute;top:calc(12px + env(safe-area-inset-top,0px));right:12px}
 .ack{font-size:12.5px;color:var(--ok);font-weight:600}
 .ack.no{color:var(--muted);font-weight:500}
+/* ---------- A4 인쇄 ---------- */
+#printSheet{display:none}
+@page{size:A4 portrait;margin:10mm}
+@media print{
+  html,body{background:#fff!important;padding:0!important;margin:0!important}
+  body>*:not(#printSheet){display:none!important}
+  #printSheet{display:block!important}
+}
+#printSheet,.ps-measure{width:718px;color:#000;background:#fff;font-family:"IBM Plex Sans KR","Malgun Gothic","Apple SD Gothic Neo",sans-serif;font-size:11px;line-height:1.35;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.ps-measure{position:absolute;left:-10000px;top:0;display:block!important}
+.ps h1{font-size:22px;margin:0;letter-spacing:.2em;font-weight:700}
+.ps .org{font-size:11px;color:#333;letter-spacing:.04em}
+.ps .top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-bottom:8px}
+.ps table{border-collapse:collapse;width:100%}
+.ps th,.ps td{border:1px solid #000;padding:3px 5px;vertical-align:middle}
+.ps th{background:#eef0ec;font-weight:600}
+.ps .appr{width:auto}
+.ps .appr th.side{width:18px;line-height:1.1;padding:2px}
+.ps .appr td{width:86px;height:46px;text-align:center;padding:1px}
+.ps .appr td img{max-width:84px;max-height:40px;display:block;margin:0 auto}
+.ps .appr .at{font-size:8.5px;color:#333;height:auto}
+.ps .info{margin-bottom:6px}
+.ps .info th{width:62px}
+.ps .chk td.c{text-align:center}
+.ps .chk .rd{width:62px;text-align:center;font-weight:600;background:#f6f7f4}
+.ps .chk .rd small{display:block;font-weight:400;font-size:9.5px;color:#333}
+.ps .chk .no{width:20px;text-align:center}
+.ps .chk .yn{width:42px;text-align:center}
+.ps .chk .yn b{color:#b00}
+.ps .chk .act{width:250px}
+.ps .chk tr.etcrow td{background:#fafaf8}
+.ps .box{border:1px solid #000;border-top:0;padding:5px 6px;min-height:34px;white-space:pre-wrap}
+.ps .sec{margin-top:6px}
+.ps .sec>.h{border:1px solid #000;background:#eef0ec;font-weight:600;padding:3px 6px}
+.ps .phs{display:flex;flex-wrap:wrap;gap:6px;border:1px solid #000;border-top:0;padding:5px}
+.ps .phs figure{margin:0;text-align:center;font-size:9px}
+.ps .phs img{height:78px;width:auto;max-width:130px;object-fit:cover;display:block;border:1px solid #999}
+.ps .foot{margin-top:6px;font-size:9px;color:#444;display:flex;justify-content:space-between}
 </style>
 </head>
 <body>
@@ -240,7 +278,7 @@ textarea.notes{min-height:110px;resize:vertical}
     </section>
 
     <section class="block">
-      <div class="block-h"><h2>근무 정보</h2><span class="sub" id="editState">새 일지</span></div>
+      <div class="block-h"><h2>근무 정보</h2><span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="sub" id="editState">새 일지</span><button type="button" class="btn small" id="printBtn" hidden>A4 인쇄</button></span></div>
       <div class="grid">
         <label class="f">근무일자<input type="date" id="date"></label>
         <label class="f">요일<span class="weekday" id="weekday">–</span></label>
@@ -300,6 +338,7 @@ textarea.notes{min-height:110px;resize:vertical}
 </div>
 <div class="viewer" id="viewer" hidden><img id="viewerImg" alt="첨부 사진"><button class="btn small" id="viewerClose">닫기</button></div>
 
+<div id="printSheet"></div>
 <div class="bar" id="bar" hidden>
   <div class="in">
     <span class="status" id="status"></span>
@@ -728,6 +767,60 @@ async function addPhoto(r,file,host){
 $("viewerClose").addEventListener("click",()=>{$("viewer").hidden=true});
 $("viewer").addEventListener("click",e=>{if(e.target.id==="viewer")$("viewer").hidden=true});
 
+/* ---------- A4 인쇄 ---------- */
+function esc(v){return String(v??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function buildPrintHTML(){
+  const L=cur?.log||{}, rv=cur?.review||{}, ak=cur?.ack||{};
+  const sigCell=x=>x?.sig?`<img src="${x.sig}" alt="">`:"";
+  const atCell=x=>x?.at?esc(fmt(x.at)):"";
+  const w={sig:L.sig,at:L.sig?L.updatedAt:""};
+  let rows="";
+  for(const R of ROUNDS){
+    const span=R.items.length+1, t=L.rounds?.[R.r]?.time||"";
+    R.items.forEach((it,i)=>{
+      const c=L.checks?.[it.k];
+      rows+=`<tr>${i===0?`<td class="rd" rowspan="${span}">${R.n}<small>${esc(R.title.replace(" 점검",""))}</small><small>${t?esc(t):"미점검"}</small></td>`:""}
+        <td class="no">${i+1}</td><td>${esc(it.t)}</td>
+        <td class="yn">${c?.s==="유"?"<b>유</b>":c?.s==="무"?"무":""}</td><td class="act">${esc(c?.a||"")}</td></tr>`;
+    });
+    rows+=`<tr class="etcrow"><td class="no">·</td><td colspan="3"><b>기타</b> ${esc(L.rounds?.[R.r]?.etc||"")}</td></tr>`;
+  }
+  const inst=r=>{const x=rv[r];if(!x)return `<span style="color:#666">결재 전</span>`;
+    return (x.instruction?esc(x.instruction):`<span style="color:#666">지시사항 없음</span>`)+
+      (x.instruction?`<div style="font-size:9px;color:#333;margin-top:2px">근무자 확인: ${ak[r]?esc(fmt(ak[r].at)):"미확인"}</div>`:"")};
+  let ph="";
+  for(const R of ROUNDS) for(const [,p] of Object.entries(photos[R.r]||{})) ph+=`<figure><img src="${p.data}" alt=""><figcaption>${R.n}</figcaption></figure>`;
+  const now=new Date();
+  return `<div class="ps">
+    <div class="top">
+      <div><div class="org">경주축산농협 TMR사료공장</div><h1>당직 근무일지</h1></div>
+      <table class="appr"><tr><th class="side" rowspan="3">결<br>재</th><th>근무자</th><th>공장장</th><th>본부장</th></tr>
+        <tr><td>${sigCell(w)}</td><td>${sigCell(rv.manager)}</td><td>${sigCell(rv.director)}</td></tr>
+        <tr><td class="at">${atCell(w)}</td><td class="at">${atCell(rv.manager)}</td><td class="at">${atCell(rv.director)}</td></tr></table>
+    </div>
+    <table class="info"><tr><th>근무일자</th><td>${esc(L.date)} (${esc(weekday(L.date))})</td><th>근무자</th><td>${esc(L.worker)}</td>
+      <th>근무시간</th><td>${esc(L.start)} ~ ${esc(L.end)}</td><th>점검</th><td>${L.roundsDone??0}/3회 · 이상 ${L.issues||0}건</td></tr></table>
+    <table class="chk"><tr><th>구분</th><th>No</th><th>점검 항목</th><th>이상유무</th><th>이상 내용 및 조치사항</th></tr>${rows}</table>
+    <div class="sec"><div class="h">특이사항</div><div class="box">${esc(L.notes||"")}</div></div>
+    <div class="sec"><table><tr><th style="width:62px">공장장<br>지시사항</th><td>${inst("manager")}</td></tr>
+      <tr><th>본부장<br>지시사항</th><td>${inst("director")}</td></tr></table></div>
+    ${ph?`<div class="sec"><div class="h">첨부 사진</div><div class="phs">${ph}</div></div>`:""}
+    <div class="foot"><span>경주축산농협 TMR사료공장 당직 근무일지</span><span>출력 ${esc(fmt(now.toISOString()))}</span></div>
+  </div>`;
+}
+async function printLog(){
+  if(!cur?.log){setStatus("저장된 일지가 있어야 인쇄할 수 있습니다");return}
+  const html=buildPrintHTML();
+  // 화면 밖에서 높이를 재서 A4 한 장(190×277mm)에 맞게 축소
+  const m=document.createElement("div");m.className="ps-measure";m.innerHTML=html;document.body.appendChild(m);
+  await Promise.all([...m.querySelectorAll("img")].map(i=>i.complete?0:new Promise(r=>{i.onload=i.onerror=r})));
+  const H=990, h=m.offsetHeight; m.remove();
+  const sheet=$("printSheet");sheet.innerHTML=html;
+  sheet.style.zoom = h>H ? (H/h).toFixed(3) : "1";
+  setTimeout(()=>window.print(),50);
+}
+$("printBtn").addEventListener("click",printLog);
+
 /* ---------- 팝업 알림 ----------
    근무자: 공장장·본부장 지시사항 중 아직 '확인' 안 한 것
    공장장·본부장: 이상('유')이 있는 일지 중 내가 아직 확인 안 한 것 */
@@ -815,6 +908,7 @@ function openDate(date){
     renderReview();
     renderWorkerSig();
     renderPhotos();
+    $("printBtn").hidden=!log;
     first=false;
   },()=>setStatus("불러오지 못했습니다. 다시 로그인하세요."));
 }
