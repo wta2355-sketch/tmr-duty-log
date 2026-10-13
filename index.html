@@ -91,6 +91,11 @@ input:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px soli
 .seg button.on[data-v="무"]{background:var(--ok-soft);color:var(--ok)}
 .seg button.on[data-v="유"]{background:var(--warn-soft);color:var(--warn)}
 .item .act{grid-column:2/4}
+.rbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--bg)}
+.rbar label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);font-weight:500}
+.rbar input[type=time]{width:auto;padding:6px 8px;font-size:15px}
+.rbar .sp{flex:1}
+.round .block-h h2 .n{font-family:var(--f-mono);color:var(--accent);margin-right:6px}
 .item.issue{background:var(--warn-soft)}
 .item .act textarea{min-height:60px;resize:vertical}
 .pad{padding:14px 16px}
@@ -211,28 +216,20 @@ textarea.notes{min-height:110px;resize:vertical}
         <label class="f">근무일자<input type="date" id="date"></label>
         <label class="f">요일<span class="weekday" id="weekday">–</span></label>
         <label class="f">근무자<input type="text" id="worker" placeholder="이름" class="lf"></label>
-        <label class="f">근무 시작<input type="time" id="start" value="18:30" class="lf"></label>
+        <label class="f">근무 시작<input type="time" id="start" value="19:00" class="lf"></label>
         <label class="f">근무 종료<input type="time" id="end" value="22:00" class="lf"></label>
       </div>
     </section>
 
-    <section class="block">
-      <div class="block-h"><h2>시설점검</h2><span class="sub">이상 '유' 선택 시 조치사항 기록</span></div>
-      <div id="g-fac"></div>
-    </section>
-
-    <section class="block">
-      <div class="block-h"><h2>안전사고</h2><span class="sub">보호구 · 안전수칙 · 유해요인 · 건강</span></div>
-      <div id="g-safe"></div>
-    </section>
+    <div id="rounds"></div>
 
     <section class="block">
       <div class="block-h"><h2>특이사항</h2><span class="sub">생산 종료 시각, 인수인계 등</span></div>
-      <div class="pad"><textarea id="notes" class="notes lf" placeholder="예) 22:40 생산 종료, 2호 믹서 소음 확인 → 내일 오전 공장장 보고"></textarea></div>
+      <div class="pad"><textarea id="notes" class="notes lf" placeholder="예) 21:50 생산 종료, 2호 믹서 소음 확인 → 내일 오전 공장장 보고"></textarea></div>
     </section>
 
     <section class="block" id="workerSigBlock">
-      <div class="block-h"><h2>근무자 서명</h2><span class="sub" id="workerSigSub">저장 전에 서명하세요</span></div>
+      <div class="block-h"><h2>근무자 서명</h2><span class="sub" id="workerSigSub">3차 마감 점검 후 서명하고 저장하세요</span></div>
       <div class="pad" id="workerSig"></div>
     </section>
 
@@ -278,22 +275,36 @@ textarea.notes{min-height:110px;resize:vertical}
 </div>
 
 <script>
-const ITEMS = {
-  fac: [
-    {k:"f1", t:"공장 외부 순찰", d:"시설물, 화재예방, 배수로, 야적장 등"},
-    {k:"f2", t:"공장 내부 순찰", d:"시설물, 화재예방 등"},
-    {k:"f3", t:"식당·휴게실 점검", d:"전등, 전열기구 등"},
-    {k:"f4", t:"조사료·미생물 창고 점검", d:"전등, 전열기구 등"},
-    {k:"f5", t:"사무실 내·외부 확인", d:"전등, 전열기구 등"}
-  ],
-  safe: [
-    {k:"s1", t:"작업자 안전보호구 착용 확인", d:"사고예방 주의"},
-    {k:"s2", t:"안전수칙 준수 여부 확인", d:"지게차, 고소작업 등"},
-    {k:"s3", t:"안전사고 관련 유해요인 확인", d:""},
-    {k:"s4", t:"근로자 건강 관련 이상여부 점검", d:""}
-  ]
-};
-const ALL = [...ITEMS.fac, ...ITEMS.safe];
+const ROUNDS = [
+  {r:"r1", n:"1차", title:"작업 시작 점검", when:"19:00 ~ 19:30", items:[
+    {k:"a1", t:"작업 인원·건강상태 확인", d:"출근 인원, 음주·피로·몸살 등 이상 여부"},
+    {k:"a2", t:"안전보호구 착용 확인", d:"안전화, 안전모, 방진마스크, 장갑"},
+    {k:"a3", t:"믹서·컨베이어 방호덮개·비상정지", d:"덮개 탈거 여부, 비상정지 스위치 작동"},
+    {k:"a4", t:"지게차 작업 전 점검", d:"경광등·후진경보·타이어·포크, 작업구역 통제"},
+    {k:"a5", t:"원료 투입구 이물질 확인", d:"비닐·끈·금속 등 혼입 여부, 투입구 주변 정리"},
+    {k:"a6", t:"작업장·야적장 야간 조명", d:"조도 부족, 소등 구역 여부"}
+  ]},
+  {r:"r2", n:"2차", title:"작업 중 점검", when:"20:30 ~ 21:00", items:[
+    {k:"b1", t:"회전체 주변 안전수칙 준수", d:"가동 중 손 넣기·청소 금지, 끼임 위험"},
+    {k:"b2", t:"지게차 운행·적재 상태", d:"과속·과적, 보행자 동선 분리"},
+    {k:"b3", t:"고소작업 안전대 착용", d:"호퍼 상부, 사다리 작업 등"},
+    {k:"b4", t:"분진·집진 상태", d:"분진 누적, 집진기 가동 여부"},
+    {k:"b5", t:"전기판넬·모터 이상 여부", d:"과열, 이상소음, 타는 냄새"},
+    {k:"b6", t:"생산 사료 이물질·포장 상태", d:"배출 사료 이물질, 랩핑·포장 파손"},
+    {k:"b7", t:"작업자 컨디션·유해요인 확인", d:"피로, 소음, 바닥 미끄럼 등"}
+  ]},
+  {r:"r3", n:"3차", title:"작업 종료 후 마감 점검", when:"22:00 ~", items:[
+    {k:"c1", t:"설비 전원 차단·잠금", d:"믹서, 컨베이어, 집진기 전원 OFF"},
+    {k:"c2", t:"공장 내부 순찰", d:"시설물, 화재예방, 분진·잔량 청소 상태"},
+    {k:"c3", t:"공장 외부 순찰", d:"시설물, 화재예방, 배수로, 야적장 덮개"},
+    {k:"c4", t:"조사료·미생물 창고 점검", d:"전등, 전열기구, 문 잠금"},
+    {k:"c5", t:"식당·휴게실 점검", d:"전등, 전열기구"},
+    {k:"c6", t:"사무실 내·외부 확인", d:"전등, 전열기구, 문단속"},
+    {k:"c7", t:"지게차 주차·열쇠 회수", d:"지정장소 주차, 충전 연결"},
+    {k:"c8", t:"잔류 인원 확인·출입문 시건", d:"전원 퇴근 확인, 정문·출입문 잠금"}
+  ]}
+];
+const ALL = ROUNDS.flatMap(R=>R.items.map(it=>({...it, r:R.r, n:R.n})));
 const DAYS = ["일","월","화","수","목","금","토"];
 const ROLE_NAME = {worker:"근무자", manager:"공장장", director:"본부장"};
 const ROOT = "dutyLogs";
@@ -307,14 +318,18 @@ function makeDemo(){
   const iso=(d,h,m)=>{const x=new Date(d+"T00:00:00");x.setHours(h,m);return x.toISOString()};
   if(!store){
     const t=new Date();const ds=n=>{const x=new Date(t);x.setDate(x.getDate()-n);x.setMinutes(x.getMinutes()-x.getTimezoneOffset());return x.toISOString().slice(0,10)};
-    const base={f1:{s:"무",a:""},f2:{s:"무",a:""},f3:{s:"무",a:""},f4:{s:"무",a:""},f5:{s:"무",a:""},s1:{s:"무",a:""},s2:{s:"무",a:""},s3:{s:"무",a:""},s4:{s:"무",a:""}};
+    const base=Object.fromEntries(ALL.map(it=>[it.k,{s:"무",a:""}]));
+    const rt={r1:{time:"19:25"},r2:{time:"20:50"},r3:{time:"21:55"}};
+    const fakeSig=seed=>{const c=document.createElement("canvas");c.width=360;c.height=140;const g=c.getContext("2d");
+      g.strokeStyle="#111";g.lineWidth=2.6;g.lineCap="round";g.beginPath();g.moveTo(40,95);
+      for(let i=1;i<=14;i++)g.lineTo(40+i*18,95-Math.abs(Math.sin(i*seed))*45);g.stroke();return c.toDataURL("image/png")};
     const d2=ds(2),d1=ds(1);
     store={dutyLogs:{
-      [d2]:{log:{date:d2,worker:"예시 근무자A",start:"18:30",end:"22:00",checks:base,issues:0,notes:"(예시) 21:50 생산 종료, 특이사항 없음",updatedAt:iso(d2,22,5)},
-            review:{manager:{name:"예시 공장장",instruction:"(예시) 야적장 배수로 낙엽 정리 바랍니다.",at:iso(d1,8,40)},
-                    director:{name:"예시 본부장",instruction:"",at:iso(d1,10,15)}}},
-      [d1]:{log:{date:d1,worker:"예시 근무자B",start:"18:30",end:"22:00",
-            checks:{...base,f2:{s:"유",a:"(예시) 2호 믹서실 형광등 1개 깜빡임 → 전원 차단, 공장장 보고"}},issues:1,
+      [d2]:{log:{date:d2,worker:"예시 근무자A",start:"19:00",end:"22:00",checks:base,rounds:rt,roundsDone:3,sig:fakeSig(1.3),issues:0,notes:"(예시) 21:50 생산 종료, 특이사항 없음",updatedAt:iso(d2,22,5)},
+            review:{manager:{name:"공장장",instruction:"(예시) 야적장 배수로 낙엽 정리 바랍니다.",at:iso(d1,8,40),sig:fakeSig(2.1)},
+                    director:{name:"본부장",instruction:"",at:iso(d1,10,15),sig:fakeSig(0.4)}}},
+      [d1]:{log:{date:d1,worker:"예시 근무자B",start:"19:00",end:"22:00",rounds:rt,roundsDone:3,sig:fakeSig(0.7),
+            checks:{...base,b5:{s:"유",a:"(예시) 2호 믹서 모터 이상소음 → 가동 중지 후 공장장 보고"}},issues:1,
             notes:"(예시) 21:40 생산 종료",updatedAt:iso(d1,21,55)}}
     }};
   }
@@ -386,24 +401,56 @@ function lsSet(k,v){try{v==null?localStorage.removeItem(k):localStorage.setItem(
 
 /* ---------- 점검 항목 ---------- */
 function buildItems(){
-  for(const [g,list] of [["g-fac",ITEMS.fac],["g-safe",ITEMS.safe]]){
-    const host=$(g);
-    list.forEach((it,i)=>{
+  const host=$("rounds");
+  for(const R of ROUNDS){
+    const sec=document.createElement("section");sec.className="block round";sec.id="round-"+R.r;
+    sec.innerHTML=`<div class="block-h"><h2><span class="n">${R.n}</span>${R.title}</h2><span class="sub">${R.when}</span></div>
+      <div class="rbar">
+        <label>점검 시각<input type="time" id="rt-${R.r}" class="lf"></label>
+        <button type="button" class="btn small lf" data-now>지금</button>
+        <span class="sp"></span>
+        <span class="pill muted" id="rs-${R.r}">미점검</span>
+        <button type="button" class="btn small lf" data-allok>모두 이상없음</button>
+      </div>
+      <div id="g-${R.r}"></div>`;
+    host.appendChild(sec);
+    const g=sec.querySelector("#g-"+R.r);
+    R.items.forEach((it,i)=>{
       const row=document.createElement("div");row.className="item";row.id="row-"+it.k;
       row.innerHTML=`<span class="no">${i+1}.</span>
         <div class="txt"><b></b><small></small></div>
         <div class="seg" role="group" aria-label="이상유무">
-          <button type="button" data-v="무" class="on" aria-pressed="true">무</button>
+          <button type="button" data-v="무" aria-pressed="false">무</button>
           <button type="button" data-v="유" aria-pressed="false">유</button>
         </div>
         <div class="act" hidden><textarea id="act-${it.k}" class="lf" placeholder="이상 내용과 조치사항"></textarea></div>`;
       row.querySelector("b").textContent=it.t;
       const sm=row.querySelector("small"); if(it.d) sm.textContent=it.d; else sm.remove();
-      row.querySelectorAll(".seg button").forEach(b=>{b.classList.add("lf");b.addEventListener("click",()=>{setState(it.k,b.dataset.v);dirty()})});
+      row.querySelectorAll(".seg button").forEach(b=>{b.classList.add("lf");b.addEventListener("click",()=>{
+        setState(it.k,b.dataset.v);stampRound(R.r);updateRound(R.r);dirty()})});
       row.querySelector("textarea").addEventListener("input",dirty);
-      host.appendChild(row);
+      g.appendChild(row);
     });
+    sec.querySelector("[data-now]").addEventListener("click",()=>{$("rt-"+R.r).value=nowHM();updateRound(R.r);dirty()});
+    sec.querySelector("[data-allok]").addEventListener("click",()=>{
+      R.items.forEach(it=>{if(!getState(it.k))setState(it.k,"무")});stampRound(R.r);updateRound(R.r);dirty()});
+    $("rt-"+R.r).addEventListener("input",()=>{updateRound(R.r);dirty()});
   }
+}
+function nowHM(){const d=new Date();return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")}
+function stampRound(r){if(!$("rt-"+r).value)$("rt-"+r).value=nowHM()}
+function roundInfo(R,checks,time){
+  const done=R.items.filter(it=>checks?.[it.k]?.s).length;
+  const iss=R.items.filter(it=>checks?.[it.k]?.s==="유").length;
+  return {done,total:R.items.length,iss,started:done>0||!!time,complete:done===R.items.length};
+}
+function updateRound(r){
+  const R=ROUNDS.find(x=>x.r===r);
+  const checks=Object.fromEntries(R.items.map(it=>[it.k,{s:getState(it.k)}]));
+  const i=roundInfo(R,checks,$("rt-"+r).value);
+  const el=$("rs-"+r);
+  el.className="pill "+(i.complete?(i.iss?"warn":"ok"):i.started?"info":"muted");
+  el.textContent=i.complete?(i.iss?`완료 · 이상 ${i.iss}`:"완료 · 이상 없음"):i.started?`진행 ${i.done}/${i.total}`:"미점검";
 }
 function setState(k,v){
   const row=$("row-"+k);
@@ -411,20 +458,23 @@ function setState(k,v){
   row.classList.toggle("issue",v==="유");
   row.querySelector(".act").hidden = v!=="유";
 }
-function getState(k){return $("row-"+k).querySelector(".seg button.on").dataset.v}
+function getState(k){return $("row-"+k).querySelector(".seg button.on")?.dataset.v||""}
 function setEditable(on){document.querySelectorAll(".lf").forEach(el=>el.disabled=!on)}
 
 function collectLog(){
   const checks={};let issues=0;
-  for(const it of ALL){const s=getState(it.k);const a=$("act-"+it.k).value.trim();checks[it.k]={s,a:s==="유"?a:""};if(s==="유")issues++}
+  for(const it of ALL){const s=getState(it.k);if(!s)continue;const a=$("act-"+it.k).value.trim();checks[it.k]={s,a:s==="유"?a:""};if(s==="유")issues++}
+  const rounds={};let roundsDone=0;
+  for(const R of ROUNDS){const t=$("rt-"+R.r).value;if(t)rounds[R.r]={time:t};if(roundInfo(R,checks,t).complete)roundsDone++}
   return {date:$("date").value, worker:$("worker").value.trim(), start:$("start").value, end:$("end").value,
-    checks, issues, notes:$("notes").value.trim(), updatedAt:new Date().toISOString()};
+    checks, rounds, roundsDone, issues, notes:$("notes").value.trim(), updatedAt:new Date().toISOString()};
 }
 function fillLog(d){
   $("worker").value=d?.worker||"";
-  $("start").value=d?.start||"18:30";
+  $("start").value=d?.start||"19:00";
   $("end").value=d?.end||"22:00";
-  for(const it of ALL){const c=d?.checks?.[it.k];setState(it.k,c?.s||"무");$("act-"+it.k).value=c?.a||""}
+  for(const it of ALL){const c=d?.checks?.[it.k];setState(it.k,c?.s||"");$("act-"+it.k).value=c?.a||""}
+  for(const R of ROUNDS){$("rt-"+R.r).value=d?.rounds?.[R.r]?.time||"";updateRound(R.r)}
   $("notes").value=d?.notes||"";
 }
 function dirty(){
@@ -462,6 +512,7 @@ function renderReview(){
       }
     }else if(mine){
       if(!hasLog){const s=document.createElement("div");s.className="sub";s.textContent="근무자가 일지를 저장하면 결재할 수 있습니다.";box.appendChild(s)}
+      else if(r==="manager"&&!cur.log.sig){const s=document.createElement("div");s.className="sub";s.textContent="근무자가 마감 점검 후 서명하면 결재할 수 있습니다.";box.appendChild(s)}
       else if(r==="director"&&!rv.manager){const s=document.createElement("div");s.className="sub";s.textContent="공장장 결재 후에 결재할 수 있습니다.";box.appendChild(s)}
       else{
         const ed=document.createElement("div");ed.className="edit";
@@ -522,7 +573,7 @@ function renderWorkerSig(){
   const host=$("workerSig");host.textContent="";workerPad=null;
   const log=cur?.log, date=$("date").value;
   const canEdit = role==="worker" && !cur?.review?.manager;
-  $("workerSigSub").textContent = canEdit ? "저장 전에 서명하세요" : "";
+  $("workerSigSub").textContent = canEdit ? "3차 마감 점검 후 서명하고 저장하세요" : "";
   if(log?.sig && !(canEdit && resign)){
     const sb=document.createElement("div");sb.className="sigview";
     const im=document.createElement("img");im.src=log.sig;im.alt="근무자 서명";sb.appendChild(im);
@@ -582,7 +633,7 @@ function openDate(date){
       setEditable(!locked);
       $("saveBtn").disabled=locked;$("delBtn").hidden=!log||locked;
       $("editState").textContent=locked?"결재됨 · 수정 불가":log?"저장된 일지 · 수정 가능":"새 일지";
-      if(first||!isDirty) setStatus(locked?"공장장 결재가 끝나 수정할 수 없습니다":log?"저장됨 · "+fmt(log.updatedAt):"작성 중");
+      if(first||!isDirty) setStatus(locked?"공장장 결재가 끝나 수정할 수 없습니다":log?`저장됨 ${fmt(log.updatedAt)} · 점검 ${log.roundsDone??0}/3 · `+(log.sig?"서명 완료":"마감 후 서명하세요"):"작성 중");
     }else{
       fillLog(log);setEditable(false);
       $("editState").textContent=log?`${log.worker} 작성 · ${fmt(log.updatedAt)}`:"작성된 일지 없음";
@@ -598,16 +649,21 @@ async function save(){
   const data=collectLog();
   if(!data.date){setStatus("근무일자를 선택하세요");$("date").focus();return}
   if(!data.worker){setStatus("근무자 이름을 입력하세요");$("worker").focus();return}
-  const miss=ALL.find(it=>data.checks[it.k].s==="유"&&!data.checks[it.k].a);
-  if(miss){setStatus(`‘${miss.t}’ 조치사항을 입력하세요`);$("act-"+miss.k).focus();return}
-  data.sig = (workerPad && workerPad.hasInk()) ? workerPad.toDataURL() : (cur?.log?.sig || "");
-  if(!data.sig){setStatus("근무자 서명란에 서명한 뒤 저장하세요");$("workerSigBlock").scrollIntoView({behavior:"smooth",block:"center"});return}
+  for(const R of ROUNDS){
+    const t=$("rt-"+R.r).value, i=roundInfo(R,data.checks,t);
+    if(i.started&&!i.complete){const it=R.items.find(x=>!data.checks[x.k]);
+      setStatus(`${R.n} 점검 ‘${it.t}’ 항목을 체크하세요`);$("row-"+it.k).scrollIntoView({behavior:"smooth",block:"center"});return}
+  }
+  const miss=ALL.find(it=>data.checks[it.k]?.s==="유"&&!data.checks[it.k].a);
+  if(miss){setStatus(`${miss.n} ‘${miss.t}’ 조치사항을 입력하세요`);$("act-"+miss.k).focus();return}
+  const sig = (workerPad && workerPad.hasInk()) ? workerPad.toDataURL() : (cur?.log?.sig || "");
+  if(sig) data.sig=sig;
   $("saveBtn").disabled=true;setStatus("저장 중…");
   try{
     await db.ref(`${ROOT}/${data.date}/log`).set(data);
     isDirty=false;lsSet("dutyDraft",null);
     delete sigStrokes["worker-"+data.date];resign=false;renderWorkerSig();
-    setStatus(`${data.date} 일지를 저장했습니다`);
+    setStatus(`${data.date} 저장 · 점검 ${data.roundsDone}/3`+(data.sig?"":" · 마감 후 서명하세요"));
   }catch(e){
     setStatus(e?.code==="PERMISSION_DENIED"?"결재가 끝난 일지이거나 저장 권한이 없습니다.":"저장하지 못했습니다. 연결을 확인하고 다시 누르세요.");
   }finally{$("saveBtn").disabled=!!cur?.review?.manager}
@@ -649,7 +705,7 @@ function watchMonth(m){
     renderList();
   },()=>{$("listEmpty").textContent="기록을 불러오지 못했습니다. 다시 로그인하세요."});
 }
-function waitingFor(r){return r.review?.manager ? (r.review?.director?null:"director") : "manager"}
+function waitingFor(r){return r.review?.manager ? (r.review?.director?null:"director") : (r.log?.sig?"manager":"worker")}
 function renderList(){
   const m=$("month").value;
   let list=monthRecords;
@@ -666,15 +722,17 @@ function renderList(){
     const d=document.createElement("span");d.className="d";d.textContent=r.date.slice(5).replace("-",".")+" ("+weekday(r.date)[0]+")";
     const w=document.createElement("span");w.className="w";w.textContent=`${L.worker||"—"}  ${L.start||""}~${L.end||""}`;
     const sm=document.createElement("small");
-    const probs=ALL.filter(it=>L.checks?.[it.k]?.s==="유").map(it=>it.t);
+    const probs=ALL.filter(it=>L.checks?.[it.k]?.s==="유").map(it=>it.n+" "+it.t);
     sm.textContent=probs.length?probs.join(", "):(L.notes||"특이사항 없음");w.appendChild(sm);
     const right=document.createElement("span");right.className="right";
     const p=document.createElement("span");p.className="pill "+(L.issues?"warn":"ok");p.textContent=L.issues?`이상 ${L.issues}`:"이상 없음";
+    const rd=L.roundsDone??0;
+    const c=document.createElement("span");c.className="pill "+(rd>=3?"muted":"info");c.textContent=`점검 ${rd}/3`;right.append(c);
     const wf=waitingFor(r);
     const q=document.createElement("span");
     q.className="pill "+(!wf?"muted":wf===role?"info":"muted");
-    q.textContent=!wf?"결재 완료":`${ROLE_NAME[wf]} 결재 대기`;
-    right.append(p,q);b.append(d,w,right);
+    q.textContent=!wf?"결재 완료":wf==="worker"?"근무자 서명 전":`${ROLE_NAME[wf]} 결재 대기`;
+    right.prepend(p);right.append(q);b.append(d,w,right);
     b.addEventListener("click",()=>{$("date").value=r.date;openDate(r.date);showTab("write");window.scrollTo(0,0)});
     li.appendChild(b);ul.appendChild(li);
   }
@@ -682,11 +740,11 @@ function renderList(){
 function exportCsv(){
   const m=$("month").value;
   const list=[...monthRecords].sort((a,b)=>a.date.localeCompare(b.date));
-  const head=["근무일자","요일","근무자","시작","종료",...ALL.map(i=>i.t),...ALL.map(i=>i.t+" 조치"),"특이사항","공장장","공장장 결재시각","공장장 지시사항","본부장","본부장 결재시각","본부장 지시사항"];
+  const head=["근무일자","요일","근무자","시작","종료",...ROUNDS.map(R=>R.n+" 점검시각"),...ALL.map(i=>i.n+" "+i.t),...ALL.map(i=>i.n+" "+i.t+" 조치"),"특이사항","공장장","공장장 결재시각","공장장 지시사항","본부장","본부장 결재시각","본부장 지시사항"];
   const esc=v=>`"${String(v??"").replace(/"/g,'""')}"`;
   const lines=[head.map(esc).join(",")];
   for(const r of list){const L=r.log,M=r.review?.manager||{},D=r.review?.director||{};
-    lines.push([r.date,weekday(r.date),L.worker,L.start,L.end,...ALL.map(i=>L.checks?.[i.k]?.s||""),...ALL.map(i=>L.checks?.[i.k]?.a||""),L.notes,M.name,fmt(M.at),M.instruction,D.name,fmt(D.at),D.instruction].map(esc).join(","))}
+    lines.push([r.date,weekday(r.date),L.worker,L.start,L.end,...ROUNDS.map(R=>L.rounds?.[R.r]?.time||""),...ALL.map(i=>L.checks?.[i.k]?.s||""),...ALL.map(i=>L.checks?.[i.k]?.a||""),L.notes,M.name,fmt(M.at),M.instruction,D.name,fmt(D.at),D.instruction].map(esc).join(","))}
   const blob=new Blob(["﻿"+lines.join("\r\n")],{type:"text/csv;charset=utf-8"});
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`당직일지_${m}.csv`;
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
