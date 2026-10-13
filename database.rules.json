@@ -1,5 +1,3 @@
-
-Database.rules · JSON
 {
   "rules": {
     ".read": false,
@@ -58,4 +56,3 @@ Database.rules · JSON
     }
   }
 }
-Claude가 응답을 완료했습니다
