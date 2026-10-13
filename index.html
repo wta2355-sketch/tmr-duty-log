@@ -313,7 +313,7 @@ const $ = id => document.getElementById(id);
 /* ---------- 체험 모드: Firebase 설정 전이거나 주소 끝에 ?demo 를 붙이면 이 기기 안에서만 동작 ---------- */
 const DEMO = typeof firebase==="undefined" || String(firebaseConfig.apiKey).startsWith("여기에") || /[?&]demo/.test(location.search);
 function makeDemo(){
-  const KEY="dutyDemoStore";
+  const KEY="dutyDemoStore2";
   let store; try{store=JSON.parse(localStorage.getItem(KEY)||"null")}catch(e){}
   const iso=(d,h,m)=>{const x=new Date(d+"T00:00:00");x.setHours(h,m);return x.toISOString()};
   if(!store){
