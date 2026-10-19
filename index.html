@@ -28,8 +28,7 @@ const firebaseConfig = {
 const ACCOUNTS = {
   worker:   "duty@gjtmr.local",      // 당직 근무자(공용)
   manager:  "manager@gjtmr.local",   // 공장장
-  director: "director@gjtmr.local",  // 본부장
-  admin:    "admin@gjtmr.local"      // 담당자(당직명령부 작성)
+  director: "director@gjtmr.local"   // 본부장
 };
 // 화면에서 입력한 비밀번호가 그대로 Firebase 비밀번호로 쓰입니다(6자 이상).
 const PW_SUFFIX = "";
@@ -160,7 +159,7 @@ textarea.notes{min-height:110px;resize:vertical}
 /* 로그인 */
 .login{max-width:400px;margin:10vh auto 0;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:24px 20px;display:flex;flex-direction:column;gap:14px}
 .login .err{color:var(--danger);font-size:13px;min-height:1.2em}
-.roles{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.roles{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:9px;overflow:hidden}
 .roles button{font:inherit;font-weight:600;font-size:15px;border:0;background:var(--surface);color:var(--muted);padding:10px 4px;cursor:pointer}
 .roles button+button{border-left:1px solid var(--line)}
 .roles button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
@@ -267,7 +266,6 @@ textarea.notes{min-height:110px;resize:vertical}
       <button type="button" data-role="worker" aria-pressed="true">근무자</button>
       <button type="button" data-role="manager" aria-pressed="false">공장장</button>
       <button type="button" data-role="director" aria-pressed="false">본부장</button>
-      <button type="button" data-role="admin" aria-pressed="false">담당자</button>
     </div>
     <label class="f">비밀번호<input type="password" id="pw" inputmode="numeric" autocomplete="current-password" required></label>
     <button class="btn primary" type="submit" id="loginBtn">들어가기</button>
@@ -295,6 +293,11 @@ textarea.notes{min-height:110px;resize:vertical}
 
   <div id="view-write">
     <!-- 근무자용: 최근 지시사항 -->
+    <section class="block" id="todayDuty">
+      <div class="block-h"><h2>당직명령부</h2><button type="button" class="btn small" id="goRoster">명령부 보기·수정</button></div>
+      <div class="pad" id="todayDutyText" style="display:flex;gap:18px;flex-wrap:wrap;font-size:15px"></div>
+    </section>
+
     <section class="block" id="recentBox" hidden>
       <div class="block-h"><h2>최근 지시사항</h2><span class="sub">공장장·본부장이 남긴 내용</span></div>
       <div id="recentList"></div>
@@ -888,7 +891,7 @@ $("printBtn").addEventListener("click",printLog);
    dutyStaff  = {list:["김철수",...]}            담당자만 수정
    dutyRoster/YYYY-MM = {days:{"01":{name,off,note}}, updatedAt}  담당자만 수정 */
 let staff=[], rosterRef=null, staffRef=null, roster=null, rDirty=false, rLogs={}, rLogRef=null;
-const isAdmin=()=>role==="admin";
+const isAdmin=()=>!!role;   // 근무자·공장장·본부장 누구나 명령부 작성·수정
 function daysIn(m){const [y,mo]=m.split("-").map(Number);return new Date(y,mo,0).getDate()}
 function dow(m,d){const [y,mo]=m.split("-").map(Number);return new Date(y,mo-1,d).getDay()}
 function blankRoster(m){
@@ -986,8 +989,9 @@ function renderRoster(){
   const un=Object.values(roster.days).filter(x=>!x.off&&!x.name).length;
   $("rCount").textContent=(Object.entries(cnt).map(([n,c])=>`${n} ${c}회`).join(" · ")||"아직 배정된 당직자가 없습니다.")+(un?` · 미배정 ${un}일`:"");
   if(!rDirty){
-    $("rStatus").textContent=roster.saved?`저장됨 ${roster.updatedAt?fmt(roster.updatedAt):""}`:(admin?"아직 저장 전입니다":"");
-    $("rosterState").textContent=roster.saved?`${roster.updatedAt?fmt(roster.updatedAt):""} 작성`:"작성 전";
+    const who=roster.updatedBy?`${roster.updatedBy} · `:"";
+    $("rStatus").textContent=roster.saved?`저장됨 · ${who}${roster.updatedAt?fmt(roster.updatedAt):""}`:"아직 저장 전입니다";
+    $("rosterState").textContent=roster.saved?`${who}${roster.updatedAt?fmt(roster.updatedAt):""} 수정`:"작성 전";
   }
 }
 function rTouch(rerender=true){rDirty=true;$("rStatus").textContent="수정 중 · 저장 전";if(rerender)renderRoster()}
@@ -1001,8 +1005,8 @@ async function saveRoster(){
   const m=$("rMonth").value;
   const days={};for(const [k,v] of Object.entries(roster.days))days[k]={name:v.name||"",off:!!v.off,note:(v.note||"").trim()};
   $("rSave").disabled=true;$("rStatus").textContent="저장 중…";
-  try{const at=new Date().toISOString();await db.ref(`dutyRoster/${m}`).set({days,updatedAt:at});rDirty=false;roster={days,updatedAt:at,saved:true};renderRoster();$("rStatus").textContent=`${m.replace("-","년 ")}월 명령부를 저장했습니다`}
-  catch(e){$("rStatus").textContent=e?.code==="PERMISSION_DENIED"?"저장 권한이 없습니다. 담당자 계정으로 로그인하세요.":"저장하지 못했습니다. 연결을 확인하세요."}
+  try{const at=new Date().toISOString();const by=ROLE_NAME[role];await db.ref(`dutyRoster/${m}`).set({days,updatedAt:at,updatedBy:by});rDirty=false;roster={days,updatedAt:at,updatedBy:by,saved:true};renderRoster();$("rStatus").textContent=`${m.replace("-","년 ")}월 명령부를 저장했습니다`;renderTodayDuty()}
+  catch(e){$("rStatus").textContent=e?.code==="PERMISSION_DENIED"?"저장 권한이 없습니다. Firebase 규칙을 최신으로 게시했는지 확인하세요.":"저장하지 못했습니다. 연결을 확인하세요."}
   finally{$("rSave").disabled=false}
 }
 async function saveStaff(){
@@ -1033,8 +1037,17 @@ function buildRosterPrint(){
 async function rosterNameFor(date){
   try{const v=(await db.ref(`dutyRoster/${date.slice(0,7)}/days/${date.slice(8)}`).get()).val();return v&&!v.off?v.name||"":""}catch(e){return ""}
 }
+async function renderTodayDuty(){
+  const host=$("todayDutyText");if(!host)return;
+  const t=today(), d=new Date();d.setDate(d.getDate()+1);d.setMinutes(d.getMinutes()-d.getTimezoneOffset());const tm=d.toISOString().slice(0,10);
+  const get=async k=>{try{return (await db.ref(`dutyRoster/${k.slice(0,7)}/days/${k.slice(8)}`).get()).val()}catch(e){return null}};
+  const [a,b]=await Promise.all([get(t),get(tm)]);
+  const fmtD=(lab,x)=>`<span><span class="sub">${lab}</span> <b>${x?(x.off?"휴무":esc(x.name||"미배정")):"명령부 없음"}</b>${x?.note?` <span class="sub">(${esc(x.note)})</span>`:""}</span>`;
+  host.innerHTML=fmtD("오늘",a)+fmtD("내일",b);
+}
+$("goRoster").addEventListener("click",()=>{showTab("roster");window.scrollTo(0,0)});
 $("rMonth").value=today().slice(0,7);
-$("rMonth").addEventListener("change",()=>{watchRoster($("rMonth").value);if(isAdmin())suggestStart()});
+$("rMonth").addEventListener("change",()=>{watchRoster($("rMonth").value);suggestStart()});
 $("rAuto").addEventListener("click",autoAssign);
 $("rSave").addEventListener("click",saveRoster);
 $("staffSave").addEventListener("click",saveStaff);
@@ -1050,7 +1063,7 @@ function watchAlerts(){
   alertRef.on("value",snap=>{
     const v=snap.val()||{};
     if(role==="worker") renderRecent(v);
-    alertItems=role==="admin"?[]:collectAlerts(v);
+    alertItems=collectAlerts(v);
     const fresh=alertItems.filter(a=>!snoozed.has(a.key));
     if(fresh.length) showAlert(fresh); else $("alertModal").hidden=true;
   },()=>{});
@@ -1239,8 +1252,9 @@ function exportCsv(){
 
 function showTab(t){
   for(const x of ["write","list","roster"]){$("tab-"+x).setAttribute("aria-selected",t===x);$("view-"+x).hidden=t!==x}
-  $("bar").hidden=t!=="write"||role==="admin";
-  $("rBar").hidden=t!=="roster"||role!=="admin";
+  $("bar").hidden=t!=="write";
+  $("rBar").hidden=t!=="roster";
+  if(t==="roster") setTimeout(()=>{if(roster&&!roster.saved&&!rDirty)suggestStart()},500);
   if(t==="list") watchMonth($("month").value);
   if(t==="roster"&&!rosterRef){watchRoster($("rMonth").value)}
 }
@@ -1300,11 +1314,10 @@ auth.onAuthStateChanged(u=>{
     for(const r of [curRef,monthRef,photoRef,alertRef,rosterRef,staffRef,rLogRef]) if(r) r.off();curRef=monthRef=photoRef=alertRef=rosterRef=staffRef=rLogRef=null;return}
   $("who").innerHTML="";const b=document.createElement("b");b.textContent=ROLE_NAME[role];$("who").append(b,"(으)로 접속 중");
   $("workerBtns").hidden=role!=="worker";
-  $("pendingWrap").hidden=role==="worker"||role==="admin";
+  $("pendingWrap").hidden=role==="worker";
   $("pendingOnly").checked=role==="manager"||role==="director";
-  watchStaff();
+  watchStaff();renderTodayDuty();
   if(role==="worker"){showTab("write");$("date").value=today();openDate(today())}
-  else if(role==="admin"){$("date").value=today();openDate(today());showTab("roster");setTimeout(suggestStart,600)}
   else{$("date").value=today();openDate(today());showTab("list")}
   watchAlerts();
 });
