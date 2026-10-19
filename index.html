@@ -28,7 +28,8 @@ const firebaseConfig = {
 const ACCOUNTS = {
   worker:   "duty@gjtmr.local",      // 당직 근무자(공용)
   manager:  "manager@gjtmr.local",   // 공장장
-  director: "director@gjtmr.local"   // 본부장
+  director: "director@gjtmr.local",  // 본부장
+  admin:    "admin@gjtmr.local"      // 담당자(당직명령부 작성)
 };
 // 화면에서 입력한 비밀번호가 그대로 Firebase 비밀번호로 쓰입니다(6자 이상).
 const PW_SUFFIX = "";
@@ -159,7 +160,7 @@ textarea.notes{min-height:110px;resize:vertical}
 /* 로그인 */
 .login{max-width:400px;margin:10vh auto 0;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:24px 20px;display:flex;flex-direction:column;gap:14px}
 .login .err{color:var(--danger);font-size:13px;min-height:1.2em}
-.roles{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.roles{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-radius:9px;overflow:hidden}
 .roles button{font:inherit;font-weight:600;font-size:15px;border:0;background:var(--surface);color:var(--muted);padding:10px 4px;cursor:pointer}
 .roles button+button{border-left:1px solid var(--line)}
 .roles button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
@@ -193,6 +194,26 @@ textarea.notes{min-height:110px;resize:vertical}
 .viewer button{position:absolute;top:calc(12px + env(safe-area-inset-top,0px));right:12px}
 .ack{font-size:12.5px;color:var(--ok);font-weight:600}
 .ack.no{color:var(--muted);font-weight:500}
+/* 당직명령부 표 */
+.rtable{border-collapse:collapse;width:100%;min-width:360px}
+.rtable th,.rtable td{border-top:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:middle}
+.rtable th{font-size:12.5px;color:var(--muted);font-weight:600;background:var(--bg)}
+.rtable td.d{font-family:var(--f-mono);font-size:13.5px;white-space:nowrap;width:80px}
+.rtable tr.we td.d{color:var(--danger)}
+.rtable tr.off td{color:var(--muted)}
+.rtable tr.today td{background:var(--accent-soft)}
+.rtable select,.rtable input[type=text]{font:inherit;font-size:15px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--ink);width:100%;min-width:0}
+.rtable td.nm{min-width:110px}
+.rtable td.off{width:52px;text-align:center}
+.rtable td.off input{width:20px;height:20px}
+.rtable td.st{width:76px;text-align:right}
+.rtable{table-layout:auto}
+#rTable th,#rTable td{padding-left:6px;padding-right:6px}
+.ps .rt td,.ps .rt th{padding:2px 6px;font-size:11px;height:22px}
+.ps .rt td.c{text-align:center}
+.ps .rt tr.off td{color:#888}
+.ps .rt tr.we td.dd{color:#b00}
+
 /* ---------- A4 인쇄 ---------- */
 #printSheet{display:none}
 @page{size:A4 portrait;margin:10mm}
@@ -246,6 +267,7 @@ textarea.notes{min-height:110px;resize:vertical}
       <button type="button" data-role="worker" aria-pressed="true">근무자</button>
       <button type="button" data-role="manager" aria-pressed="false">공장장</button>
       <button type="button" data-role="director" aria-pressed="false">본부장</button>
+      <button type="button" data-role="admin" aria-pressed="false">담당자</button>
     </div>
     <label class="f">비밀번호<input type="password" id="pw" inputmode="numeric" autocomplete="current-password" required></label>
     <button class="btn primary" type="submit" id="loginBtn">들어가기</button>
@@ -265,6 +287,7 @@ textarea.notes{min-height:110px;resize:vertical}
     <div class="tabs" role="tablist">
       <button id="tab-write" role="tab" aria-selected="true">일지</button>
       <button id="tab-list" role="tab" aria-selected="false">기록 조회</button>
+      <button id="tab-roster" role="tab" aria-selected="false">당직명령부</button>
     </div>
   </header>
   <div id="demoNotice" class="notice" hidden style="background:var(--info-soft);color:var(--info)">체험 모드입니다. 입력한 내용은 이 기기에만 저장되고, (예시) 표시된 기록은 둘러보기용입니다. ‘일지’ 탭 맨 아래에서 로그아웃한 뒤 다른 역할로 들어가 결재 흐름을 확인해 보세요. <button class="btn link" id="demoReset" style="color:inherit">체험 데이터 초기화</button></div>
@@ -310,6 +333,37 @@ textarea.notes{min-height:110px;resize:vertical}
     <div style="text-align:right"><button class="btn link" id="logoutBtn">이 기기에서 로그아웃</button></div>
   </div>
 
+  <div id="view-roster" hidden>
+    <section class="block">
+      <div class="block-h"><h2 id="rosterTitle">당직명령부</h2><span class="sub" id="rosterState"></span></div>
+      <div class="filter">
+        <label class="f">명령 월<input type="month" id="rMonth"></label>
+        <span style="flex:1"></span>
+        <button class="btn small" id="rPrint">A4 인쇄</button>
+      </div>
+      <div class="pad" id="rAdminBox" hidden style="border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+          <label class="f" style="width:180px">시작 순번<select id="rStart" style="font:inherit;font-size:16px;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)"></select></label>
+          <button class="btn small" id="rAuto">평일 순번 자동배정</button>
+        </div>
+        <div class="sub">평일(월~금)만 명단 순서대로 채웁니다. 공휴일·행사일은 표에서 '휴무'를 체크하면 그날은 건너뜁니다. 배정 후 날짜별로 사람을 바꿀 수 있습니다.</div>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="rtable" id="rTable"></table>
+      </div>
+      <div class="pad sub" id="rCount"></div>
+    </section>
+
+    <section class="block" id="staffBox" hidden>
+      <div class="block-h"><h2>당직 근무자 명단</h2><span class="sub">한 줄에 한 명, 순번대로</span></div>
+      <div class="pad" style="display:flex;flex-direction:column;gap:8px">
+        <textarea id="staffText" rows="6" placeholder="예)&#10;김철수&#10;이영희&#10;박민수"></textarea>
+        <div><button class="btn small" id="staffSave">명단 저장</button></div>
+      </div>
+    </section>
+    <div style="text-align:right"><button class="btn link" id="logoutBtn2">이 기기에서 로그아웃</button></div>
+  </div>
+
   <div id="view-list" hidden>
     <section class="block">
       <div class="filter">
@@ -339,6 +393,12 @@ textarea.notes{min-height:110px;resize:vertical}
 <div class="viewer" id="viewer" hidden><img id="viewerImg" alt="첨부 사진"><button class="btn small" id="viewerClose">닫기</button></div>
 
 <div id="printSheet"></div>
+<div class="bar" id="rBar" hidden>
+  <div class="in">
+    <span class="status" id="rStatus"></span>
+    <button class="btn primary" id="rSave">명령부 저장</button>
+  </div>
+</div>
 <div class="bar" id="bar" hidden>
   <div class="in">
     <span class="status" id="status"></span>
@@ -387,7 +447,7 @@ const ROUNDS = [
 ];
 const ALL = ROUNDS.flatMap(R=>R.items.map(it=>({...it, r:R.r, n:R.n})));
 const DAYS = ["일","월","화","수","목","금","토"];
-const ROLE_NAME = {worker:"근무자", manager:"공장장", director:"본부장"};
+const ROLE_NAME = {worker:"근무자", manager:"공장장", director:"본부장", admin:"담당자"};
 const ROOT = "dutyLogs";
 const $ = id => document.getElementById(id);
 
@@ -414,6 +474,7 @@ function makeDemo(){
             notes:"(예시) 21:40 생산 종료",updatedAt:iso(d1,21,55)}}
     }};
   }
+  if(!store.dutyStaff) store.dutyStaff={list:["예시 김철수","예시 이영희","예시 박민수","예시 최지훈"]};
   const persist=()=>{try{localStorage.setItem(KEY,JSON.stringify(store))}catch(e){}};
   const parts=p=>p.split("/").filter(Boolean);
   const getAt=p=>{let o=store;for(const k of parts(p)){if(o==null||typeof o!=="object")return null;o=o[k]}return o??null};
@@ -810,7 +871,9 @@ function buildPrintHTML(){
 }
 async function printLog(){
   if(!cur?.log){setStatus("저장된 일지가 있어야 인쇄할 수 있습니다");return}
-  const html=buildPrintHTML();
+  await printHTML(buildPrintHTML());
+}
+async function printHTML(html){
   // 화면 밖에서 높이를 재서 A4 한 장(190×277mm)에 맞게 축소
   const m=document.createElement("div");m.className="ps-measure";m.innerHTML=html;document.body.appendChild(m);
   await Promise.all([...m.querySelectorAll("img")].map(i=>i.complete?0:new Promise(r=>{i.onload=i.onerror=r})));
@@ -820,6 +883,162 @@ async function printLog(){
   setTimeout(()=>window.print(),50);
 }
 $("printBtn").addEventListener("click",printLog);
+
+/* ---------- 당직명령부 ----------
+   dutyStaff  = {list:["김철수",...]}            담당자만 수정
+   dutyRoster/YYYY-MM = {days:{"01":{name,off,note}}, updatedAt}  담당자만 수정 */
+let staff=[], rosterRef=null, staffRef=null, roster=null, rDirty=false, rLogs={}, rLogRef=null;
+const isAdmin=()=>role==="admin";
+function daysIn(m){const [y,mo]=m.split("-").map(Number);return new Date(y,mo,0).getDate()}
+function dow(m,d){const [y,mo]=m.split("-").map(Number);return new Date(y,mo-1,d).getDay()}
+function blankRoster(m){
+  const days={};for(let d=1;d<=daysIn(m);d++){const w=dow(m,d);days[String(d).padStart(2,"0")]={name:"",off:w===0||w===6,note:""}}
+  return {days};
+}
+function watchRoster(m){
+  if(rosterRef) rosterRef.off(); if(rLogRef) rLogRef.off();
+  $("rosterTitle").textContent=`${m.replace("-","년 ")}월 당직명령부`;
+  rDirty=false;roster=null;renderRoster();
+  rosterRef=db.ref(`dutyRoster/${m}`);
+  rosterRef.on("value",snap=>{
+    if(rDirty) return;           // 편집 중엔 덮어쓰지 않음
+    const v=snap.val();
+    roster=v||blankRoster(m); roster.saved=!!v;
+    // 빠진 날짜 보정
+    const b=blankRoster(m).days; roster.days={...b,...(roster.days||{})};
+    renderRoster();
+  },()=>{$("rStatus").textContent="명령부를 불러오지 못했습니다."});
+  rLogRef=db.ref(ROOT).orderByKey().startAt(m+"-01").endAt(m+"-31");
+  rLogRef.on("value",snap=>{rLogs=snap.val()||{};renderRoster()},()=>{});
+}
+function watchStaff(){
+  if(staffRef) staffRef.off();
+  staffRef=db.ref("dutyStaff");
+  staffRef.on("value",snap=>{staff=(snap.val()?.list||[]).filter(Boolean);$("staffText").value=staff.join("\n");fillStart();renderRoster()},()=>{});
+}
+function fillStart(){
+  const sel=$("rStart");const cur=sel.value;sel.textContent="";
+  staff.forEach(n=>{const o=document.createElement("option");o.value=n;o.textContent=n;sel.appendChild(o)});
+  if(staff.includes(cur)) sel.value=cur;
+}
+async function suggestStart(){
+  // 지난달 마지막 당직자 다음 사람부터
+  const m=$("rMonth").value;const [y,mo]=m.split("-").map(Number);
+  const pm=new Date(y,mo-2,1);const pk=`${pm.getFullYear()}-${String(pm.getMonth()+1).padStart(2,"0")}`;
+  try{
+    const v=(await db.ref(`dutyRoster/${pk}`).get()).val();
+    const last=Object.keys(v?.days||{}).sort().reverse().map(k=>v.days[k]).find(x=>!x.off&&x.name)?.name;
+    const i=staff.indexOf(last); if(i>=0) $("rStart").value=staff[(i+1)%staff.length];
+  }catch(e){}
+}
+function renderRoster(){
+  const m=$("rMonth").value, t=$("rTable"); t.textContent="";
+  const admin=isAdmin();
+  $("rAdminBox").hidden=!admin; $("staffBox").hidden=!admin;
+  $("rBar").hidden=!admin || $("view-roster").hidden;
+  if(!roster){t.innerHTML=`<tr><td class="sub" style="padding:16px">불러오는 중…</td></tr>`;return}
+  const head=document.createElement("tr");
+  head.innerHTML=admin?`<th>일자</th><th>당직자 · 비고</th><th>휴무</th><th style="text-align:right">일지</th>`:`<th>일자</th><th>당직자</th><th>비고</th><th style="text-align:right">일지</th>`;
+  t.appendChild(head);
+  const td=today();
+  for(const k of Object.keys(roster.days).sort()){
+    const dd=roster.days[k], d=Number(k), w=dow(m,d), date=`${m}-${k}`;
+    const tr=document.createElement("tr");
+    tr.className=(w===0||w===6?"we ":"")+(dd.off?"off ":"")+(date===td?"today":"");
+    const c1=document.createElement("td");c1.className="d";c1.textContent=`${m.slice(5)}.${k} (${DAYS[w]})`;
+    const c2=document.createElement("td");c2.className="nm";
+    const c3=document.createElement("td");
+    if(admin){
+      const sel=document.createElement("select");
+      const opts=["",...staff];if(dd.name&&!staff.includes(dd.name))opts.push(dd.name);
+      opts.forEach(n=>{const o=document.createElement("option");o.value=n;o.textContent=n||(dd.off?"휴무":"— 선택 —");sel.appendChild(o)});
+      sel.value=dd.name||"";sel.disabled=dd.off;
+      sel.addEventListener("change",()=>{dd.name=sel.value;rTouch()});
+      c2.appendChild(sel);
+      const ni=document.createElement("input");ni.type="text";ni.value=dd.note||"";ni.placeholder=dd.off?"예) 공휴일":"";
+      ni.addEventListener("input",()=>{dd.note=ni.value;rTouch(false)});
+      ni.style.marginTop="4px";ni.style.fontSize="13px";ni.placeholder=dd.off?"비고 (예: 공휴일)":"비고";
+      c2.appendChild(ni);
+    }else{
+      c2.textContent=dd.off?"휴무":(dd.name||"미배정");
+      if(!dd.off&&!dd.name)c2.style.color="var(--muted)";
+      c3.textContent=dd.note||"";c3.style.fontSize="13px";
+    }
+    tr.append(c1,c2);if(!admin)tr.appendChild(c3);
+    if(admin){
+      const c4=document.createElement("td");c4.className="off";
+      const cb=document.createElement("input");cb.type="checkbox";cb.checked=!!dd.off;cb.setAttribute("aria-label",`${k}일 휴무`);
+      cb.addEventListener("change",()=>{dd.off=cb.checked;if(dd.off)dd.name="";rTouch()});
+      c4.appendChild(cb);tr.appendChild(c4);
+    }
+    const c5=document.createElement("td");c5.className="st";
+    const L=rLogs[date]?.log, rv=rLogs[date]?.review;
+    if(L){const p=document.createElement("span");p.className="pill "+(rv?.director?"muted":rv?.manager?"info":"ok");
+      p.textContent=rv?.director?"결재 완료":rv?.manager?"공장장 결재":"작성됨";
+      if(L.worker&&dd.name&&L.worker!==dd.name){p.className="pill warn";p.title=`일지 작성자: ${L.worker}`;p.textContent="대리 근무"}
+      p.style.cursor="pointer";p.addEventListener("click",()=>{$("date").value=date;openDate(date);showTab("write");window.scrollTo(0,0)});
+      c5.appendChild(p)}
+    tr.appendChild(c5);
+    t.appendChild(tr);
+  }
+  // 인원별 횟수
+  const cnt={};Object.values(roster.days).forEach(x=>{if(!x.off&&x.name)cnt[x.name]=(cnt[x.name]||0)+1});
+  const un=Object.values(roster.days).filter(x=>!x.off&&!x.name).length;
+  $("rCount").textContent=(Object.entries(cnt).map(([n,c])=>`${n} ${c}회`).join(" · ")||"아직 배정된 당직자가 없습니다.")+(un?` · 미배정 ${un}일`:"");
+  if(!rDirty){
+    $("rStatus").textContent=roster.saved?`저장됨 ${roster.updatedAt?fmt(roster.updatedAt):""}`:(admin?"아직 저장 전입니다":"");
+    $("rosterState").textContent=roster.saved?`${roster.updatedAt?fmt(roster.updatedAt):""} 작성`:"작성 전";
+  }
+}
+function rTouch(rerender=true){rDirty=true;$("rStatus").textContent="수정 중 · 저장 전";if(rerender)renderRoster()}
+function autoAssign(){
+  if(!staff.length){$("rStatus").textContent="먼저 아래 근무자 명단을 저장하세요";$("staffText").focus();return}
+  let i=Math.max(0,staff.indexOf($("rStart").value));
+  for(const k of Object.keys(roster.days).sort()){const dd=roster.days[k];if(dd.off){dd.name="";continue}dd.name=staff[i%staff.length];i++}
+  rTouch();
+}
+async function saveRoster(){
+  const m=$("rMonth").value;
+  const days={};for(const [k,v] of Object.entries(roster.days))days[k]={name:v.name||"",off:!!v.off,note:(v.note||"").trim()};
+  $("rSave").disabled=true;$("rStatus").textContent="저장 중…";
+  try{const at=new Date().toISOString();await db.ref(`dutyRoster/${m}`).set({days,updatedAt:at});rDirty=false;roster={days,updatedAt:at,saved:true};renderRoster();$("rStatus").textContent=`${m.replace("-","년 ")}월 명령부를 저장했습니다`}
+  catch(e){$("rStatus").textContent=e?.code==="PERMISSION_DENIED"?"저장 권한이 없습니다. 담당자 계정으로 로그인하세요.":"저장하지 못했습니다. 연결을 확인하세요."}
+  finally{$("rSave").disabled=false}
+}
+async function saveStaff(){
+  const list=$("staffText").value.split("\n").map(x=>x.trim()).filter(Boolean);
+  try{await db.ref("dutyStaff").set({list,updatedAt:new Date().toISOString()});$("rStatus").textContent=`근무자 ${list.length}명 명단을 저장했습니다`}
+  catch(e){$("rStatus").textContent="명단을 저장하지 못했습니다."}
+}
+function buildRosterPrint(){
+  const m=$("rMonth").value;let rows="";
+  for(const k of Object.keys(roster.days).sort()){
+    const dd=roster.days[k],w=dow(m,Number(k));
+    rows+=`<tr class="${w===0||w===6?"we ":""}${dd.off?"off":""}"><td class="c dd">${Number(k)}일</td><td class="c dd">${DAYS[w]}</td>
+      <td class="c">${dd.off?"휴무":esc(dd.name)}</td><td>${esc(dd.note)}</td><td></td></tr>`;
+  }
+  const cnt={};Object.values(roster.days).forEach(x=>{if(!x.off&&x.name)cnt[x.name]=(cnt[x.name]||0)+1});
+  return `<div class="ps">
+    <div class="top">
+      <div><div class="org">경주축산농협 TMR사료공장</div><h1>${esc(m.replace("-","년 "))}월 당직명령부</h1></div>
+      <table class="appr"><tr><th class="side" rowspan="2">결<br>재</th><th>담당</th><th>공장장</th><th>본부장</th></tr>
+        <tr><td></td><td></td><td></td></tr></table>
+    </div>
+    <div style="margin-bottom:6px">아래와 같이 ${esc(m.replace("-","년 "))}월 당직 근무를 명함. (근무시간 19:00 ~ 22:00, 평일)</div>
+    <table class="rt"><tr><th style="width:56px">일자</th><th style="width:36px">요일</th><th style="width:120px">당직자</th><th>비고</th><th style="width:90px">확인(서명)</th></tr>${rows}</table>
+    <div class="sec"><div class="h">인원별 당직 횟수</div><div class="box" style="min-height:0">${esc(Object.entries(cnt).map(([n,c])=>`${n} ${c}회`).join("   ")||"-")}</div></div>
+    <div class="foot"><span>경주축산농협 TMR사료공장 당직명령부</span><span>출력 ${esc(fmt(new Date().toISOString()))}</span></div>
+  </div>`;
+}
+async function rosterNameFor(date){
+  try{const v=(await db.ref(`dutyRoster/${date.slice(0,7)}/days/${date.slice(8)}`).get()).val();return v&&!v.off?v.name||"":""}catch(e){return ""}
+}
+$("rMonth").value=today().slice(0,7);
+$("rMonth").addEventListener("change",()=>{watchRoster($("rMonth").value);if(isAdmin())suggestStart()});
+$("rAuto").addEventListener("click",autoAssign);
+$("rSave").addEventListener("click",saveRoster);
+$("staffSave").addEventListener("click",saveStaff);
+$("rPrint").addEventListener("click",()=>{if(roster)printHTML(buildRosterPrint())});
 
 /* ---------- 팝업 알림 ----------
    근무자: 공장장·본부장 지시사항 중 아직 '확인' 안 한 것
@@ -831,7 +1050,7 @@ function watchAlerts(){
   alertRef.on("value",snap=>{
     const v=snap.val()||{};
     if(role==="worker") renderRecent(v);
-    alertItems=collectAlerts(v);
+    alertItems=role==="admin"?[]:collectAlerts(v);
     const fresh=alertItems.filter(a=>!snoozed.has(a.key));
     if(fresh.length) showAlert(fresh); else $("alertModal").hidden=true;
   },()=>{});
@@ -894,7 +1113,8 @@ function openDate(date){
     if(role==="worker"){
       if(first||!isDirty){
         if(log) fillLog(log);
-        else{let d=null;try{d=JSON.parse(lsGet("dutyDraft")||"null")}catch(e){} fillLog(d&&d.date===date?d:null)}
+        else{let d=null;try{d=JSON.parse(lsGet("dutyDraft")||"null")}catch(e){} fillLog(d&&d.date===date?d:null)
+          if(!$("worker").value) rosterNameFor(date).then(n=>{if(n&&!$("worker").value&&$("date").value===date){$("worker").value=n;setStatus(`명령부 당직자 ${n} 님 · 작성 중`)}})}
       }
       setEditable(!locked);
       $("saveBtn").disabled=locked;$("delBtn").hidden=!log||locked;
@@ -1018,10 +1238,11 @@ function exportCsv(){
 }
 
 function showTab(t){
-  $("tab-write").setAttribute("aria-selected",t==="write");$("tab-list").setAttribute("aria-selected",t==="list");
-  $("view-write").hidden=t!=="write";$("view-list").hidden=t!=="list";
-  $("bar").hidden=t!=="write";
+  for(const x of ["write","list","roster"]){$("tab-"+x).setAttribute("aria-selected",t===x);$("view-"+x).hidden=t!==x}
+  $("bar").hidden=t!=="write"||role==="admin";
+  $("rBar").hidden=t!=="roster"||role!=="admin";
   if(t==="list") watchMonth($("month").value);
+  if(t==="roster"&&!rosterRef){watchRoster($("rMonth").value)}
 }
 
 /* ---------- 초기화 ---------- */
@@ -1039,11 +1260,13 @@ $("delNo").addEventListener("click",()=>{$("delConfirm").hidden=true});
 $("delYes").addEventListener("click",del);
 $("tab-write").addEventListener("click",()=>showTab("write"));
 $("tab-list").addEventListener("click",()=>showTab("list"));
+$("tab-roster").addEventListener("click",()=>showTab("roster"));
+$("logoutBtn2").addEventListener("click",()=>auth.signOut());
 $("month").addEventListener("change",()=>watchMonth($("month").value));
 $("pendingOnly").addEventListener("change",renderList);
 $("csvBtn").addEventListener("click",exportCsv);
 $("logoutBtn").addEventListener("click",()=>auth.signOut());
-window.addEventListener("beforeunload",e=>{if(isDirty){e.preventDefault();e.returnValue=""}});
+window.addEventListener("beforeunload",e=>{if(isDirty||rDirty){e.preventDefault();e.returnValue=""}});
 
 document.querySelectorAll(".roles button").forEach(b=>b.addEventListener("click",()=>{
   loginRole=b.dataset.role;
@@ -1073,12 +1296,15 @@ auth.onAuthStateChanged(u=>{
   if(u && !role){auth.signOut();$("loginErr").textContent="등록되지 않은 계정입니다.";return}
   $("loginView").hidden=!!u;$("appView").hidden=!u;
   if(!u){$("bar").hidden=true;$("pw").value="";$("alertModal").hidden=true;snoozed=new Set();
-    for(const r of [curRef,monthRef,photoRef,alertRef]) if(r) r.off();curRef=monthRef=photoRef=alertRef=null;return}
+    $("rBar").hidden=true;
+    for(const r of [curRef,monthRef,photoRef,alertRef,rosterRef,staffRef,rLogRef]) if(r) r.off();curRef=monthRef=photoRef=alertRef=rosterRef=staffRef=rLogRef=null;return}
   $("who").innerHTML="";const b=document.createElement("b");b.textContent=ROLE_NAME[role];$("who").append(b,"(으)로 접속 중");
   $("workerBtns").hidden=role!=="worker";
-  $("pendingWrap").hidden=role==="worker";
-  $("pendingOnly").checked=role!=="worker";
+  $("pendingWrap").hidden=role==="worker"||role==="admin";
+  $("pendingOnly").checked=role==="manager"||role==="director";
+  watchStaff();
   if(role==="worker"){showTab("write");$("date").value=today();openDate(today())}
+  else if(role==="admin"){$("date").value=today();openDate(today());showTab("roster");setTimeout(suggestStart,600)}
   else{$("date").value=today();openDate(today());showTab("list")}
   watchAlerts();
 });

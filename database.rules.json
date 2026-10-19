@@ -3,7 +3,7 @@
     ".read": false,
     ".write": false,
     "dutyLogs": {
-      ".read": "auth != null && (auth.token.email === 'duty@gjtmr.local' || auth.token.email === 'manager@gjtmr.local' || auth.token.email === 'director@gjtmr.local')",
+      ".read": "auth != null && (auth.token.email === 'duty@gjtmr.local' || auth.token.email === 'manager@gjtmr.local' || auth.token.email === 'director@gjtmr.local' || auth.token.email === 'admin@gjtmr.local')",
       "$date": {
         "log": {
           ".write": "auth != null && auth.token.email === 'duty@gjtmr.local' && $date.matches(/^\\d{4}-\\d{2}-\\d{2}$/) && !data.parent().child('review/manager').exists()",
@@ -44,7 +44,7 @@
       }
     },
     "dutyPhotos": {
-      ".read": "auth != null && (auth.token.email === 'duty@gjtmr.local' || auth.token.email === 'manager@gjtmr.local' || auth.token.email === 'director@gjtmr.local')",
+      ".read": "auth != null && (auth.token.email === 'duty@gjtmr.local' || auth.token.email === 'manager@gjtmr.local' || auth.token.email === 'director@gjtmr.local' || auth.token.email === 'admin@gjtmr.local')",
       "$date": {
         "$r": {
           "$pid": {
@@ -52,6 +52,17 @@
             ".validate": "newData.child('data').isString() && newData.child('data').val().beginsWith('data:image/jpeg;base64,') && newData.child('data').val().length < 500000 && newData.child('at').isString()"
           }
         }
+      }
+    },
+    "dutyStaff": {
+      ".read": "auth != null && (auth.token.email === 'duty@gjtmr.local' || auth.token.email === 'manager@gjtmr.local' || auth.token.email === 'director@gjtmr.local' || auth.token.email === 'admin@gjtmr.local')",
+      ".write": "auth != null && auth.token.email === 'admin@gjtmr.local'"
+    },
+    "dutyRoster": {
+      ".read": "auth != null && (auth.token.email === 'duty@gjtmr.local' || auth.token.email === 'manager@gjtmr.local' || auth.token.email === 'director@gjtmr.local' || auth.token.email === 'admin@gjtmr.local')",
+      "$month": {
+        ".write": "auth != null && auth.token.email === 'admin@gjtmr.local' && $month.matches(/^\\d{4}-\\d{2}$/)",
+        ".validate": "newData.hasChildren(['days', 'updatedAt'])"
       }
     }
   }
