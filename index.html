@@ -363,7 +363,7 @@ textarea.notes{min-height:110px;resize:vertical}
       <div class="block-h"><h2>당직 근무자 명단</h2><span class="sub">한 줄에 한 명, 순번대로</span></div>
       <div class="pad" style="display:flex;flex-direction:column;gap:8px">
         <textarea id="staffText" rows="6" placeholder="예)&#10;김철수&#10;이영희&#10;박민수"></textarea>
-        <div><button class="btn small" id="staffSave">명단 저장</button></div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn small" id="staffSave">명단 저장</button><span class="sub" id="staffMsg"></span></div>
       </div>
     </section>
     <div style="text-align:right"><button class="btn link" id="logoutBtn2">이 기기에서 로그아웃</button></div>
@@ -480,6 +480,15 @@ function makeDemo(){
     }};
   }
   if(!store.dutyStaff) store.dutyStaff={list:["예시 김철수","예시 이영희","예시 박민수","예시 최지훈"]};
+  // 실제 Firebase처럼: 키가 모두 정수(예: "01"~"31")이면 배열로 돌려줌
+  const fbArr=v=>{
+    if(!v||typeof v!=="object")return v;
+    for(const k of Object.keys(v))v[k]=fbArr(v[k]);
+    const ks=Object.keys(v);if(!ks.length||Array.isArray(v))return v;
+    let max=-1;for(const k of ks){if(!/^-?\d{1,10}$/.test(k))return v;max=Math.max(max,Number(k))}
+    if(max<2*ks.length){const a=[];for(const k of ks)a[Number(k)]=v[k];return a}
+    return v;
+  };
   const persist=()=>{try{localStorage.setItem(KEY,JSON.stringify(store))}catch(e){}};
   const parts=p=>p.split("/").filter(Boolean);
   const getAt=p=>{let o=store;for(const k of parts(p)){if(o==null||typeof o!=="object")return null;o=o[k]}return o??null};
@@ -501,7 +510,7 @@ function makeDemo(){
         if(opt.last)ks=ks.slice(-opt.last);
         v=Object.fromEntries(ks.map(k=>[k,v[k]]));if(!ks.length)v=null;
       }
-      return clone(v);
+      return fbArr(clone(v));
     };
     const snap=()=>({val:()=>read()});
     const q={
@@ -896,6 +905,13 @@ let staff=[], rosterRef=null, staffRef=null, roster=null, rDirty=false, rLogs={}
 const isAdmin=()=>!!role;   // 근무자·공장장·본부장 누구나 명령부 작성·수정
 function daysIn(m){const [y,mo]=m.split("-").map(Number);return new Date(y,mo,0).getDate()}
 function dow(m,d){const [y,mo]=m.split("-").map(Number);return new Date(y,mo-1,d).getDay()}
+// Firebase는 키가 "01"~"31"처럼 숫자면 배열로 돌려줌 → 항상 {"01":{...}} 형태로 맞춤
+function normDays(d){
+  const out={};if(!d)return out;
+  if(Array.isArray(d)){d.forEach((v,i)=>{if(v)out[String(i).padStart(2,"0")]=v})}
+  else for(const [k,v] of Object.entries(d)){if(v)out[String(Number(k)).padStart(2,"0")]=v}
+  return out;
+}
 function blankRoster(m){
   const days={};for(let d=1;d<=daysIn(m);d++){const w=dow(m,d);days[String(d).padStart(2,"0")]={name:"",off:w===0||w===6,note:""}}
   return {days};
@@ -910,7 +926,7 @@ function watchRoster(m){
     const v=snap.val();
     roster=v||blankRoster(m); roster.saved=!!v;
     // 빠진 날짜 보정
-    const b=blankRoster(m).days; roster.days={...b,...(roster.days||{})};
+    const b=blankRoster(m).days; roster.days={...b,...normDays(roster.days)};
     renderRoster();
   },()=>{$("rStatus").textContent="명령부를 불러오지 못했습니다."});
   rLogRef=db.ref(ROOT).orderByKey().startAt(m+"-01").endAt(m+"-31");
@@ -919,7 +935,10 @@ function watchRoster(m){
 function watchStaff(){
   if(staffRef) staffRef.off();
   staffRef=db.ref("dutyStaff");
-  staffRef.on("value",snap=>{staff=(snap.val()?.list||[]).filter(Boolean);$("staffText").value=staff.join("\n");fillStart();renderRoster()},()=>{});
+  staffRef.on("value",snap=>{
+    staff=(snap.val()?.list||[]).filter(Boolean);
+    if(document.activeElement!==$("staffText")) $("staffText").value=staff.join("\n");
+    fillStart();renderRoster()},()=>{});
 }
 function fillStart(){
   const sel=$("rStart");const cur=sel.value;sel.textContent="";
@@ -932,7 +951,8 @@ async function suggestStart(){
   const pm=new Date(y,mo-2,1);const pk=`${pm.getFullYear()}-${String(pm.getMonth()+1).padStart(2,"0")}`;
   try{
     const v=(await db.ref(`dutyRoster/${pk}`).get()).val();
-    const last=Object.keys(v?.days||{}).sort().reverse().map(k=>v.days[k]).find(x=>!x.off&&x.name)?.name;
+    const dd=normDays(v?.days);
+    const last=Object.keys(dd).sort().reverse().map(k=>dd[k]).find(x=>!x.off&&x.name)?.name;
     const i=staff.indexOf(last); if(i>=0) $("rStart").value=staff[(i+1)%staff.length];
   }catch(e){}
 }
@@ -998,8 +1018,11 @@ function renderRoster(){
   }
 }
 function rTouch(rerender=true){rDirty=true;$("rStatus").textContent="수정 중 · 저장 전";if(rerender)renderRoster()}
-function autoAssign(){
-  if(!staff.length){$("rStatus").textContent="먼저 아래 근무자 명단을 저장하세요";$("staffText").focus();return}
+async function autoAssign(){
+  const typed=staffFromText();
+  if(typed.length && typed.join("\n")!==staff.join("\n")){ if(!(await saveStaff())) return }
+  if(!staff.length){$("rStatus").textContent="먼저 아래 근무자 명단을 입력하세요";$("staffMsg").textContent="여기에 이름을 한 줄에 한 명씩 입력하세요";$("staffText").focus();return}
+  if(!roster){$("rStatus").textContent="명령부를 불러오는 중입니다. 잠시 후 다시 누르세요.";return}
   const N=staff.length, s0=Math.max(0,staff.indexOf($("rStart").value));
   const rotate=$("rRotate").checked && N>=3;   // 2명 이하는 밀면 연속 근무가 생겨서 제외
   let pos=0, shift=0;
@@ -1008,6 +1031,7 @@ function autoAssign(){
     dd.name=staff[(s0+shift+pos)%N];
     if(++pos===N){pos=0;if(rotate)shift++}     // 한 바퀴 돌면 시작을 한 명 밀기
   }
+  setTimeout(()=>{$("rStatus").textContent="자동배정했습니다 · 확인 후 '명령부 저장'을 누르세요"},0);
   rTouch();
 }
 async function saveRoster(){
@@ -1018,10 +1042,19 @@ async function saveRoster(){
   catch(e){$("rStatus").textContent=e?.code==="PERMISSION_DENIED"?"저장 권한이 없습니다. Firebase 규칙을 최신으로 게시했는지 확인하세요.":"저장하지 못했습니다. 연결을 확인하세요."}
   finally{$("rSave").disabled=false}
 }
+function staffFromText(){return $("staffText").value.split("\n").map(x=>x.trim()).filter(Boolean)}
 async function saveStaff(){
-  const list=$("staffText").value.split("\n").map(x=>x.trim()).filter(Boolean);
-  try{await db.ref("dutyStaff").set({list,updatedAt:new Date().toISOString()});$("rStatus").textContent=`근무자 ${list.length}명 명단을 저장했습니다`}
-  catch(e){$("rStatus").textContent="명단을 저장하지 못했습니다."}
+  const list=staffFromText(), msg=$("staffMsg");
+  if(!list.length){msg.textContent="이름을 한 줄에 한 명씩 입력하세요";msg.style.color="var(--danger)";return false}
+  msg.textContent="저장 중…";msg.style.color="";
+  try{
+    await db.ref("dutyStaff").set({list,updatedAt:new Date().toISOString()});
+    staff=list;fillStart();
+    msg.textContent=`근무자 ${list.length}명 명단을 저장했습니다`;msg.style.color="var(--ok)";return true;
+  }catch(e){
+    msg.textContent=e?.code==="PERMISSION_DENIED"?"저장 권한이 없습니다. Firebase 규칙을 최신 파일로 게시했는지 확인하세요.":"명단을 저장하지 못했습니다. 연결을 확인하세요.";
+    msg.style.color="var(--danger)";return false;
+  }
 }
 function buildRosterPrint(){
   const m=$("rMonth").value;let rows="";
