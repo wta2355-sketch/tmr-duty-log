@@ -327,7 +327,7 @@ textarea.notes{min-height:110px;resize:vertical}
     </section>
 
     <section class="block" id="reviewBlock">
-      <div class="block-h"><h2>지시사항 · 결재</h2><span class="sub">공장장 결재 후 본부장 결재</span></div>
+      <div class="block-h"><h2>지시사항 · 결재</h2><span class="sub">공장장·본부장 각자 결재 (순서 무관)</span></div>
       <div class="review">
         <div class="rv" id="rv-manager"></div>
         <div class="rv" id="rv-director"></div>
@@ -660,7 +660,7 @@ function renderReview(){
     head.append(t,p);box.appendChild(head);
 
     const mine = role===r;
-    const canAct = mine && hasLog && (r==="manager" ? !rv.director : !!rv.manager);
+    const canAct = mine && hasLog;
 
     if(data){
       const inst=document.createElement("div");inst.className="inst";inst.textContent=data.instruction||"";box.appendChild(inst);
@@ -674,12 +674,10 @@ function renderReview(){
         cancel.disabled=!canAct;
         cancel.addEventListener("click",()=>review(r,null));
         btns.appendChild(cancel);box.appendChild(btns);
-        if(r==="manager"&&rv.director){const s=document.createElement("div");s.className="sub";s.textContent="본부장 결재가 끝나 취소할 수 없습니다.";box.appendChild(s)}
       }
     }else if(mine){
       if(!hasLog){const s=document.createElement("div");s.className="sub";s.textContent="근무자가 일지를 저장하면 결재할 수 있습니다.";box.appendChild(s)}
-      else if(r==="manager"&&!cur.log.sig){const s=document.createElement("div");s.className="sub";s.textContent="근무자가 마감 점검 후 서명하면 결재할 수 있습니다.";box.appendChild(s)}
-      else if(r==="director"&&!rv.manager){const s=document.createElement("div");s.className="sub";s.textContent="공장장 결재 후에 결재할 수 있습니다.";box.appendChild(s)}
+      else if(!cur.log.sig){const s=document.createElement("div");s.className="sub";s.textContent="근무자가 마감 점검 후 서명하면 결재할 수 있습니다.";box.appendChild(s)}
       else{
         const ed=document.createElement("div");ed.className="edit";
         const ta=document.createElement("textarea");ta.id="inst-"+r;ta.placeholder="지시사항 (없으면 비워두세요)";
@@ -738,7 +736,7 @@ let workerPad=null, resign=false;
 function renderWorkerSig(){
   const host=$("workerSig");host.textContent="";workerPad=null;
   const log=cur?.log, date=$("date").value;
-  const canEdit = role==="worker" && !cur?.review?.manager;
+  const canEdit = role==="worker" && !isLocked();
   $("workerSigSub").textContent = canEdit ? "3차 마감 점검 후 서명하고 저장하세요" : "";
   if(log?.sig && !(canEdit && resign)){
     const sb=document.createElement("div");sb.className="sigview";
@@ -789,7 +787,7 @@ function watchPhotos(date){
   photoRef.on("value",snap=>{photos=snap.val()||{};renderPhotos()},()=>{});
 }
 function renderPhotos(){
-  const locked=!!cur?.review?.manager;
+  const locked=isLocked();
   for(const R of ROUNDS){
     const host=$("ph-"+R.r);if(!host)continue;host.textContent="";
     const list=Object.entries(photos[R.r]||{}).sort((a,b)=>String(a[1].at).localeCompare(String(b[1].at)));
@@ -998,8 +996,9 @@ function renderRoster(){
     }
     const c5=document.createElement("td");c5.className="st";
     const L=rLogs[date]?.log, rv=rLogs[date]?.review;
-    if(L){const p=document.createElement("span");p.className="pill "+(rv?.director?"muted":rv?.manager?"info":"ok");
-      p.textContent=rv?.director?"결재 완료":rv?.manager?"공장장 결재":"작성됨";
+    if(L){const both=rv?.manager&&rv?.director, any=rv?.manager||rv?.director;
+      const p=document.createElement("span");p.className="pill "+(both?"muted":any?"info":"ok");
+      p.textContent=both?"결재 완료":rv?.manager?"공장장 결재":rv?.director?"본부장 결재":"작성됨";
       if(L.worker&&dd.name&&L.worker!==dd.name){p.className="pill warn";p.title=`일지 작성자: ${L.worker}`;p.textContent="대리 근무"}
       p.style.cursor="pointer";p.addEventListener("click",()=>{$("date").value=date;openDate(date);showTab("write");window.scrollTo(0,0)});
       c5.appendChild(p)}
@@ -1164,7 +1163,7 @@ function openDate(date){
   curRef.on("value",snap=>{
     cur=snap.val();
     const log=cur?.log;
-    const locked=!!cur?.review?.manager;
+    const locked=isLocked();
     if(role==="worker"){
       if(first||!isDirty){
         if(log) fillLog(log);
@@ -1174,7 +1173,7 @@ function openDate(date){
       setEditable(!locked);
       $("saveBtn").disabled=locked;$("delBtn").hidden=!log||locked;
       $("editState").textContent=locked?"결재됨 · 수정 불가":log?"저장된 일지 · 수정 가능":"새 일지";
-      if(first||!isDirty) setStatus(locked?"공장장 결재가 끝나 수정할 수 없습니다":log?`저장됨 ${fmt(log.updatedAt)} · 점검 ${log.roundsDone??0}/3 · `+(log.sig?"서명 완료":"마감 후 서명하세요"):"작성 중");
+      if(first||!isDirty) setStatus(locked?"결재가 시작되어 수정할 수 없습니다":log?`저장됨 ${fmt(log.updatedAt)} · 점검 ${log.roundsDone??0}/3 · `+(log.sig?"서명 완료":"마감 후 서명하세요"):"작성 중");
     }else{
       fillLog(log);setEditable(false);
       $("editState").textContent=log?`${log.worker} 작성 · ${fmt(log.updatedAt)}`:"작성된 일지 없음";
@@ -1209,7 +1208,7 @@ async function save(){
     setStatus(`${data.date} 저장 · 점검 ${data.roundsDone}/3`+(data.sig?"":" · 마감 후 서명하세요"));
   }catch(e){
     setStatus(e?.code==="PERMISSION_DENIED"?"결재가 끝난 일지이거나 저장 권한이 없습니다.":"저장하지 못했습니다. 연결을 확인하고 다시 누르세요.");
-  }finally{$("saveBtn").disabled=!!cur?.review?.manager}
+  }finally{$("saveBtn").disabled=isLocked()}
 }
 async function del(){
   const date=$("date").value;$("delConfirm").hidden=true;
@@ -1246,7 +1245,10 @@ function watchMonth(m){
     renderList();
   },()=>{$("listEmpty").textContent="기록을 불러오지 못했습니다. 다시 로그인하세요."});
 }
-function waitingFor(r){return r.review?.manager ? (r.review?.director?null:"director") : (r.log?.sig?"manager":"worker")}
+function isLocked(){return !!(cur?.review?.manager||cur?.review?.director)}
+// 결재 대기: 근무자 서명 후 공장장·본부장 각각 아직 결재 안 했으면 대기 (순서 무관)
+function pendingRoles(r){if(!r.log?.sig)return ["worker"];return ["manager","director"].filter(x=>!r.review?.[x])}
+function waitingFor(r){const p=pendingRoles(r);return p.includes(role)?role:(p[0]||null)}
 function renderList(){
   const m=$("month").value;
   let list=monthRecords;
@@ -1273,7 +1275,8 @@ function renderList(){
     const wf=waitingFor(r);
     const q=document.createElement("span");
     q.className="pill "+(!wf?"muted":wf===role?"info":"muted");
-    q.textContent=!wf?"결재 완료":wf==="worker"?"근무자 서명 전":`${ROLE_NAME[wf]} 결재 대기`;
+    const pr=pendingRoles(r);
+    q.textContent=!pr.length?"결재 완료":pr[0]==="worker"?"근무자 서명 전":pr.map(x=>ROLE_NAME[x]).join("·")+" 결재 대기";
     right.prepend(p);right.append(q);b.append(d,w,right);
     b.addEventListener("click",()=>{$("date").value=r.date;openDate(r.date);showTab("write");window.scrollTo(0,0)});
     li.appendChild(b);ul.appendChild(li);
