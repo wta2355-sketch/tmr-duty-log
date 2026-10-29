@@ -38,6 +38,18 @@
             ".validate": "newData.hasChildren(['at'])"
           }
         },
+        "pre": {
+          "$r": {
+            ".write": "auth != null && $date.matches(/^\\d{4}-\\d{2}-\\d{2}$/) && (($r === 'manager' && auth.token.email === 'manager@gjtmr.local') || ($r === 'director' && auth.token.email === 'director@gjtmr.local'))",
+            ".validate": "newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length < 2000 && newData.child('at').isString()"
+          }
+        },
+        "preAck": {
+          "$r": {
+            ".write": "auth != null && auth.token.email === 'duty@gjtmr.local' && data.parent().parent().child('pre/' + $r).exists()",
+            ".validate": "newData.hasChildren(['at'])"
+          }
+        },
         "$other": {
           ".write": false
         }
