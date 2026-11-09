@@ -404,7 +404,13 @@ textarea.notes{min-height:110px;resize:vertical}
       </section>
 
       <section class="block">
-        <div class="block-h"><h2>5. 기계세트 및 해제사항</h2></div>
+        <div class="block-h"><h2>5. 기계세트 및 해제사항</h2><button type="button" class="btn small lf" id="kk-open">카톡 알림 붙여넣기</button></div>
+        <div class="pad" id="kk-box" hidden style="border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px">
+          <div class="sub">경비업체 카톡 알림을 길게 눌러 <b>복사</b>한 뒤 아래에 붙여넣으세요. 세트·해제 알림을 여러 개 한꺼번에 붙여넣어도 됩니다.</div>
+          <textarea id="kk-text" rows="4" placeholder="예) [오후 10:05] TMR사료공장 경계(세트) 되었습니다&#10;[오전 7:30] TMR사료공장 해제 되었습니다"></textarea>
+          <div id="kk-preview" style="font-size:14px;display:flex;flex-direction:column;gap:2px"></div>
+          <div><button type="button" class="btn primary small" id="kk-apply" hidden>이 시각으로 채우기</button></div>
+        </div>
         <div class="grid">
           <label class="f">기계세트 (일·시·분)<input type="datetime-local" id="g-set" class="lf"></label>
           <label class="f">세트해제 (일·시·분)<input type="datetime-local" id="g-unset" class="lf"></label>
@@ -442,7 +448,7 @@ textarea.notes{min-height:110px;resize:vertical}
       </section>
 
       <section class="block">
-        <div class="block-h"><h2>7. 비상벨 점검사항</h2><span class="sub">기계세트 해제 직후 (경비회사 비상벨은 분기 1회 이상)</span></div>
+        <div class="block-h"><h2>7. 비상벨 점검사항</h2><span class="sub">업체가 점검한 날에만 기록 (선택)</span></div>
         <div class="grid">
           <label class="f">점검 시간<input type="time" id="g-bell-t" class="lf"></label>
           <label class="f">상대방<input type="text" id="g-bell-to" class="lf" placeholder="경비회사 (경찰서 등)"></label>
@@ -1175,7 +1181,6 @@ function fillExtra(d){
   $("g-events").textContent="";
   const evs=Array.isArray(g.events)?g.events:Object.values(g.events||{});
   (evs.length?evs:[{}]).forEach(addEvent);
-  if(!d?.guard) $("g-bell-to").value="경비회사";
   segSet("cc-onoff",c.onoff||"");$("cc-login").value=c.login||"";
   for(const it of CCTV_ALL){const x=c.items?.["c"+it.k];segSet("cc-"+it.k,x?.r||"");$("cca-"+it.k).value=x?.a||"";ccToggle("cc-"+it.k)}
   syncGuardName();
@@ -1187,8 +1192,6 @@ function syncGuardName(){
   const p=staffPos(n);
   if(p){$("g-pos").value=p;$("g-pos").readOnly=true}else $("g-pos").readOnly=false;
   if(role!=="worker")return;
-  const prev=$("g-bell-by").dataset.auto;
-  if(n&&(!$("g-bell-by").value||$("g-bell-by").value===prev)){$("g-bell-by").value=n;$("g-bell-by").dataset.auto=n}
 }
 let lastSigPad=null, lastResign=false;
 function renderLastSig(){
@@ -1279,6 +1282,83 @@ async function buildCctvPrint(){
     <div style="font-size:9.5px;margin-top:4px">주) 1. 사무실, 자동화코너 등에 설치된 CCTV의 일일점검 사항 기록관리 &nbsp; 2. 결과 표시방법 : ①적정(이행) → ○표시 ②불량(요정비) → X표시 (불량시 조치사항에 내용 기재)</div>
     <div class="foot"><span>경주축산농협 TMR사료공장 CCTV 일일 점검일지 (${esc(days[0])} ~ ${esc(days[4])})</span><span>출력 ${esc(fmt(new Date().toISOString()))}</span></div>
   </div>`;
+}
+
+/* ---------- 카카오톡 경비 알림 붙여넣기 → 세트·해제 시각 자동 입력 ----------
+   카톡에서 길게 눌러 복사(여러 개 선택 복사도 가능)한 글을 붙여넣으면
+   '세트/경계/설정' 과 '해제' 가 들어간 줄의 날짜·시각을 찾아 5번 칸을 채움 */
+function kakaoParse(text, baseDate){
+  const pad=n=>String(n).padStart(2,"0");
+  const lines=text.replace(/\r/g,"").split("\n").map(l=>l.trim()).filter(Boolean);
+  let curDate=null;  // 카톡 날짜 구분선 "2026년 11월 9일 월요일"
+  const ev=[];
+  const to24=(ap,h)=>{h=+h;if(ap==="오후"&&h<12)h+=12;if(ap==="오전"&&h===12)h=0;return h};
+  for(const raw of lines){
+    const sep=raw.match(/^-*\s*(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일\s*\S*요일\s*-*$/);
+    if(sep){curDate=`${sep[1]}-${pad(sep[2])}-${pad(sep[3])}`;continue}
+    const isUnset=/해제|disarm|unset/i.test(raw);
+    const isSet=!isUnset&&/세트|경계|설정|\bset\b|\barm/i.test(raw);
+    if(!isUnset&&!isSet)continue;
+    // 카톡 복사 머리말 "[보낸이] [오후 10:05]" 제거 후 본문에서 먼저 찾음
+    const msgT=raw.match(/\[(오전|오후)\s*(\d{1,2}):(\d{2})\]/);
+    const body=raw.replace(/\[[^\]]*\]/g," ");
+    let date=null,h=null,mi=null;
+    let m=body.match(/(\d{4})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})\s*일?/);
+    if(m)date=`${m[1]}-${pad(m[2])}-${pad(m[3])}`;
+    else if((m=body.match(/(?:^|\D)(\d{1,2})\s*[./월]\s*(\d{1,2})\s*일?(?=\D|$)/))&&+m[1]>=1&&+m[1]<=12&&+m[2]>=1&&+m[2]<=31){
+      const y=(curDate||baseDate).slice(0,4);date=`${y}-${pad(m[1])}-${pad(m[2])}`;
+    }
+    let t=body.match(/(오전|오후)?\s*(\d{1,2})\s*:\s*(\d{2})/);
+    if(t){h=t[1]?to24(t[1],t[2]):+t[2];mi=+t[3]}
+    else if((t=body.match(/(오전|오후)?\s*(\d{1,2})\s*시\s*(?:(\d{1,2})\s*분)?/))){h=t[1]?to24(t[1],t[2]):+t[2];mi=+(t[3]||0)}
+    else if(msgT){h=to24(msgT[1],msgT[2]);mi=+msgT[3]}
+    if(h==null||h>23||mi>59)continue;
+    ev.push({kind:isUnset?"해제":"세트",date:date||curDate||null,h,mi,line:raw});
+  }
+  // 날짜 없는 알림: 근무일 기준, 해제가 세트보다 이른 시각이면 다음 날로
+  let lastDT=null;
+  const next=d=>{const x=new Date(d+"T00:00");x.setDate(x.getDate()+1);return `${x.getFullYear()}-${pad(x.getMonth()+1)}-${pad(x.getDate())}`};
+  for(const e of ev){
+    let d=e.date||baseDate;
+    let dt=`${d}T${pad(e.h)}:${pad(e.mi)}`;
+    if(!e.date&&lastDT&&dt<lastDT){d=next(d);dt=`${d}T${pad(e.h)}:${pad(e.mi)}`}
+    e.dt=dt;lastDT=dt;
+  }
+  ev.sort((a,b)=>a.dt.localeCompare(b.dt));
+  // 첫 세트 = 기계세트, 그 뒤 마지막 해제 = 세트해제, 사이의 해제→세트 = 중도해제
+  const r={};const i0=ev.findIndex(e=>e.kind==="세트");
+  if(i0<0)return {events:ev,result:r};
+  r.set=ev[i0].dt;
+  const after=ev.slice(i0+1);
+  let iu=-1;for(let i=after.length-1;i>=0;i--)if(after[i].kind==="해제"){iu=i;break}
+  if(iu>=0){r.unset=after[iu].dt;
+    const mid=after.slice(0,iu);let n=0;
+    for(let i=0;i<mid.length&&n<2;i++){if(mid[i].kind==="해제"){n++;r["u"+n]=mid[i].dt;const s=mid.slice(i+1).find(x=>x.kind==="세트");if(s)r["s"+n]=s.dt}}
+  }
+  return {events:ev,result:r};
+}
+function setupKakao(){
+  const box=$("kk-box"), ta=$("kk-text"), pv=$("kk-preview"), ap=$("kk-apply");
+  let parsed=null;
+  $("kk-open").addEventListener("click",()=>{box.hidden=!box.hidden;if(!box.hidden)ta.focus()});
+  const run=()=>{
+    parsed=kakaoParse(ta.value,$("date").value);
+    const R=parsed.result, lab={set:"기계세트",unset:"세트해제",u1:"1차 해제",s1:"1차 세트",u2:"2차 해제",s2:"2차 세트"};
+    const keys=Object.keys(lab).filter(k=>R[k]);
+    pv.textContent="";
+    if(!ta.value.trim()){pv.textContent="";ap.hidden=true;return}
+    if(!keys.length){pv.textContent=parsed.events.length?"세트 알림을 찾지 못했습니다. 세트(경계) 알림도 함께 붙여넣어 주세요.":"세트·해제 시각을 찾지 못했습니다. 알림 원문을 그대로 붙여넣었는지 확인해 주세요.";ap.hidden=true;return}
+    for(const k of keys){const d=document.createElement("div");d.innerHTML=`<b></b> <span></span>`;d.querySelector("b").textContent=lab[k];d.querySelector("span").textContent=fmtDT(R[k]);pv.appendChild(d)}
+    ap.hidden=false;
+  };
+  ta.addEventListener("input",run);
+  ap.addEventListener("click",()=>{
+    if(!parsed)return;const R=parsed.result;
+    for(const k of ["set","unset","u1","s1","u2","s2"]) if(R[k]) $("g-"+k).value=R[k];
+    if(R.set&&!$("g-chk-t").value){$("g-chk-t").value=R.set;if(!segGet("g-chk-ok"))segSet("g-chk-ok","여")}
+    box.hidden=true;ta.value="";pv.textContent="";ap.hidden=true;
+    dirty();setStatus("카톡 알림에서 세트·해제 시각을 넣었습니다 · 확인 후 저장하세요");
+  });
 }
 
 /* ---------- A4 인쇄 ---------- */
@@ -1827,6 +1907,7 @@ function showTab(t){
 /* ---------- 초기화 ---------- */
 buildItems();
 buildExtraForms();
+setupKakao();
 showForm(lsGet("dutyForm")||"plant");
 $("date").value=today();$("month").value=today().slice(0,7);
 $("date").addEventListener("change",()=>{
