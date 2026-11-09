@@ -73,8 +73,32 @@
     "dutyRoster": {
       ".read": "auth != null && (auth.token.email === 'duty@gjtmr.local' || auth.token.email === 'manager@gjtmr.local' || auth.token.email === 'director@gjtmr.local')",
       "$month": {
-        ".write": "auth != null && (auth.token.email === 'duty@gjtmr.local' || auth.token.email === 'manager@gjtmr.local' || auth.token.email === 'director@gjtmr.local') && $month.matches(/^\\d{4}-\\d{2}$/)",
-        ".validate": "newData.hasChildren(['days', 'updatedAt'])"
+        ".validate": "$month.matches(/^\\d{4}-\\d{2}$/) && newData.hasChildren(['days', 'updatedAt'])",
+        "days": {
+          ".write": "auth != null && (auth.token.email === 'duty@gjtmr.local' || auth.token.email === 'manager@gjtmr.local' || auth.token.email === 'director@gjtmr.local')"
+        },
+        "updatedAt": {
+          ".write": "auth != null && (auth.token.email === 'duty@gjtmr.local' || auth.token.email === 'manager@gjtmr.local' || auth.token.email === 'director@gjtmr.local')"
+        },
+        "updatedBy": {
+          ".write": "auth != null && (auth.token.email === 'duty@gjtmr.local' || auth.token.email === 'manager@gjtmr.local' || auth.token.email === 'director@gjtmr.local')"
+        },
+        "approve": {
+          "manager": {
+            ".write": "auth != null && auth.token.email === 'manager@gjtmr.local'",
+            ".validate": "newData.hasChildren(['sig', 'at']) && newData.child('sig').isString() && newData.child('sig').val().beginsWith('data:image/png;base64,') && newData.child('sig').val().length < 80000"
+          },
+          "director": {
+            ".write": "auth != null && auth.token.email === 'director@gjtmr.local'",
+            ".validate": "newData.hasChildren(['sig', 'at']) && newData.child('sig').isString() && newData.child('sig').val().beginsWith('data:image/png;base64,') && newData.child('sig').val().length < 80000"
+          },
+          "$other": {
+            ".write": false
+          }
+        },
+        "$other": {
+          ".write": false
+        }
       }
     }
   }
