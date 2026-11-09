@@ -368,10 +368,10 @@ textarea.notes{min-height:110px;resize:vertical}
     <!-- 경비당번 근무일지 -->
     <div id="form-guard" hidden>
       <section class="block">
-        <div class="block-h"><h2>1. 경비당번 근무자</h2><span class="sub">근무 정보에서 자동 입력</span></div>
+        <div class="block-h"><h2>1. 경비당번 근무자</h2><span class="sub">그날 당직자로 자동 설정</span></div>
         <div class="grid">
           <label class="f">소속<span class="weekday" style="font-family:var(--f-body)">경주축산농협 TMR사료공장</span></label>
-          <label class="f">직<input type="text" id="g-pos" class="lf" placeholder="예) 계장"></label>
+          <label class="f">직<input type="text" id="g-pos" class="lf" placeholder="명단에 직급이 없으면 입력"></label>
           <label class="f">성명<span class="weekday" style="font-family:var(--f-body)" id="g-name">–</span></label>
         </div>
       </section>
@@ -421,12 +421,23 @@ textarea.notes{min-height:110px;resize:vertical}
       </section>
 
       <section class="block">
-        <div class="block-h"><h2>6. 보안 점검 사항</h2><button type="button" class="btn small lf" id="g-sec-all">2차 모두 적정</button></div>
-        <div class="pad sub" style="padding-bottom:0">1차: 최종퇴실자 점검 · 2차: 경비당번 확인 (○ 적정 / X 불량)</div>
+        <div class="block-h"><h2>6. 보안 점검 사항</h2></div>
+        <div class="pad sub" style="padding-bottom:0">① 1차: 당직자가 아닌 <b>최종퇴실자</b>가 점검 → ② 2차: <b>당직자</b>가 최종 퇴실 시 확인 (○ 적정 / X 불량)</div>
+        <div class="grid">
+          <label class="f">1차 점검자 (당직자 외 최종퇴실자)<input type="text" id="g-last" class="lf" placeholder="이름"></label>
+          <label class="f">2차 점검자 (당직자)<span class="weekday" style="font-family:var(--f-body)" id="g-2nd">–</span></label>
+        </div>
+        <div class="pad" style="padding-top:0;display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn small lf" id="g-sec-all1">1차 모두 적정</button>
+          <button type="button" class="btn small lf" id="g-sec-all">2차 모두 적정</button>
+        </div>
         <div id="g-sec"></div>
         <div class="grid">
           <label class="f">바. 기타 특이사항 (이상 시 조치내용)<textarea id="g-sec-etc" class="lf" rows="2"></textarea></label>
-          <label class="f">최종퇴실자 (1차 점검자)<input type="text" id="g-last" class="lf" placeholder="이름"></label>
+        </div>
+        <div class="pad" style="border-top:1px solid var(--line)">
+          <div class="sub" style="margin-bottom:6px">1차 점검자(최종퇴실자) 서명 — 당직자 휴대폰에 직접 서명받으세요</div>
+          <div id="g-lastsig"></div>
         </div>
       </section>
 
@@ -1093,11 +1104,12 @@ function buildExtraForms(){
   for(const it of SEC_ITEMS){
     const r=document.createElement("div");r.className="secrow";
     r.innerHTML=`<div class="txt"><b>${it.n}. ${it.t}</b><small>${it.d}</small></div>
-      <div><div class="lab">1차</div>${segHTML("gs1-"+it.k,["○","X"])}</div>
-      <div class="s2"><div class="lab">2차</div>${segHTML("gs2-"+it.k,["○","X"])}</div>`;
+      <div><div class="lab">1차 최종퇴실자</div>${segHTML("gs1-"+it.k,["○","X"])}</div>
+      <div class="s2"><div class="lab">2차 당직자</div>${segHTML("gs2-"+it.k,["○","X"])}</div>`;
     sh.appendChild(r);
   }
   $("g-sec-all").addEventListener("click",()=>{SEC_ITEMS.forEach(it=>{if(!segGet("gs2-"+it.k))segSet("gs2-"+it.k,"○")});dirty()});
+  $("g-sec-all1").addEventListener("click",()=>{SEC_ITEMS.forEach(it=>{if(!segGet("gs1-"+it.k))segSet("gs1-"+it.k,"○")});dirty()});
   $("g-ev-add").addEventListener("click",()=>{addEvent({});dirty()});
   const ch=$("cc-list");
   for(const G of CCTV_GROUPS){
@@ -1168,11 +1180,29 @@ function fillExtra(d){
   for(const it of CCTV_ALL){const x=c.items?.["c"+it.k];segSet("cc-"+it.k,x?.r||"");$("cca-"+it.k).value=x?.a||"";ccToggle("cc-"+it.k)}
   syncGuardName();
 }
+// 경비당번 근무자 = 그날 당직자(근무자 칸, 비어 있으면 명령부 배정자) — 직급은 명단에서 자동
 function syncGuardName(){
-  const n=$("worker").value.trim();$("g-name").textContent=n||"–";
+  const n=$("worker").value.trim();
+  $("g-name").textContent=n||"–";$("g-2nd").textContent=n||"–";
+  const p=staffPos(n);
+  if(p){$("g-pos").value=p;$("g-pos").readOnly=true}else $("g-pos").readOnly=false;
   if(role!=="worker")return;
-  if(!$("g-bell-by").value&&n) $("g-bell-by").value=n;
-  if(!$("g-pos").value&&n){const p=staffPos(n);if(p)$("g-pos").value=p}
+  const prev=$("g-bell-by").dataset.auto;
+  if(n&&(!$("g-bell-by").value||$("g-bell-by").value===prev)){$("g-bell-by").value=n;$("g-bell-by").dataset.auto=n}
+}
+let lastSigPad=null, lastResign=false;
+function renderLastSig(){
+  const host=$("g-lastsig");if(!host)return;host.textContent="";lastSigPad=null;
+  const saved=cur?.log?.guard?.lastSig, date=$("date").value;
+  const canEdit=role==="worker"&&!isLocked();
+  if(saved&&!(canEdit&&lastResign)){
+    const sb=document.createElement("div");sb.className="sigview";const im=document.createElement("img");im.src=saved;im.alt="1차 점검자 서명";sb.appendChild(im);host.appendChild(sb);
+    if(canEdit){const b=document.createElement("button");b.type="button";b.className="btn small";b.style.marginTop="8px";b.textContent="서명 다시 받기";b.addEventListener("click",()=>{lastResign=true;renderLastSig()});host.appendChild(b)}
+  }else if(canEdit){
+    const pad=makeSigPad("last",date,dirty);lastSigPad=pad;
+    const clr=document.createElement("button");clr.type="button";clr.className="btn small";clr.style.marginTop="8px";clr.textContent="서명 지우기";clr.addEventListener("click",()=>pad.clear());
+    host.append(pad.wrap,clr);
+  }else{const s=document.createElement("div");s.className="sub";s.textContent=saved?"":"서명 없음";host.appendChild(s)}
 }
 function fmtDT(v){if(!v)return "";if(!v.includes("T"))return v;return `${+v.slice(5,7)}/${+v.slice(8,10)} ${v.split("T")[1].slice(0,5)}`}
 
@@ -1210,9 +1240,10 @@ function buildGuardPrint(){
       <tr><td>2차 해제 ${esc(fmtDT(g.u2))}</td><td colspan="2">2차 세트 ${esc(fmtDT(g.s2))}</td></tr>
       <tr><th>승인여부</th><td>${esc(g.appr)}</td><th>사유</th><td>${esc(g.reason)}</td></tr></table>
     <div class="gh">6. 보안 점검 사항</div>
-    <table><tr><th>점 검 사 항</th><th style="width:44px">1차</th><th style="width:44px">2차</th></tr>${sec}
+    <table><tr><th>점 검 사 항</th><th style="width:60px">1차<br><span style="font-weight:400;font-size:9px">최종퇴실자</span></th><th style="width:60px">2차<br><span style="font-weight:400;font-size:9px">경비당번</span></th></tr>${sec}
       <tr><td colspan="3"><b>바. 기타 특이사항</b> ${esc(g["sec-etc"])}</td></tr>
-      <tr><td colspan="3">점검자 — 최종퇴실자(1차): ${esc(g.last)} &nbsp;&nbsp;&nbsp; 경비당번(2차): ${esc(L.worker)}</td></tr></table>
+      <tr><td colspan="3"><table style="width:100%"><tr><th rowspan="2" style="width:60px">점검자</th><th>최종퇴실자 (1차)</th><th>경비당번 (2차)</th></tr>
+        <tr><td class="c sg">${esc(g.last)} ${g.lastSig?`<img src="${g.lastSig}" alt="" style="vertical-align:middle">`:"(인)"}</td><td class="c sg">${esc(L.worker)} ${L.sig?`<img src="${L.sig}" alt="" style="vertical-align:middle">`:"(인)"}</td></tr></table></td></tr></table>
     <div class="gh">7. 비상벨 점검사항</div>
     <table><tr><th>점검시간</th><th>상 대 방</th><th>점 검 자</th><th>이상유무</th></tr>
       <tr><td class="c">${esc(g["bell-t"])}</td><td class="c">${esc(g["bell-to"])}</td><td class="c">${esc(g["bell-by"])}</td><td class="c">${esc(g["bell-ok"])}</td></tr></table>
@@ -1355,7 +1386,7 @@ function watchStaff(){
     const list=Array.isArray(v.list)?v.list:Object.values(v.list||{}), pl=Array.isArray(v.posList)?v.posList:Object.values(v.posList||{});
     staff=[];staffPosList=[];list.forEach((n,i)=>{if(n){staff.push(n);staffPosList.push(pl[i]||"")}});
     if(document.activeElement!==$("staffText")) $("staffText").value=staffLines().join("\n");
-    fillStart();renderRoster()},()=>{});
+    fillStart();renderRoster();syncGuardName()},()=>{});
 }
 function fillStart(){
   const sel=$("rStart");const cur=sel.value;sel.textContent="";
@@ -1637,7 +1668,7 @@ function openDate(date){
   $("weekday").textContent=weekday(date);
   $("delConfirm").hidden=true;
   if(curRef) curRef.off();
-  cur=null;isDirty=false;resign=false;
+  cur=null;isDirty=false;resign=false;lastResign=false;
   setStatus("불러오는 중…");
   curRef=db.ref(`${ROOT}/${date}`);
   watchPhotos(date);
@@ -1650,7 +1681,7 @@ function openDate(date){
       if(first||!isDirty){
         if(log) fillLog(log);
         else{let d=null;try{d=JSON.parse(lsGet("dutyDraft")||"null")}catch(e){} fillLog(d&&d.date===date?d:null)
-          if(!$("worker").value) rosterNameFor(date).then(n=>{if(n&&!$("worker").value&&$("date").value===date){$("worker").value=n;setStatus(`명령부 당직자 ${n} 님 · 작성 중`)}})}
+          if(!$("worker").value) rosterNameFor(date).then(n=>{if(n&&!$("worker").value&&$("date").value===date){$("worker").value=n;syncGuardName();setStatus(`명령부 당직자 ${n} 님 · 작성 중`)}})}
       }
       setEditable(!locked);
       $("saveBtn").disabled=locked;$("delBtn").hidden=!log||locked;
@@ -1662,6 +1693,7 @@ function openDate(date){
       if(first) setStatus(log?"":"이 날짜에는 아직 일지가 없습니다");
     }
     renderReview();
+    renderLastSig();
     renderPre();
     renderWorkerSig();
     renderPhotos();
@@ -1683,11 +1715,16 @@ async function save(){
   if(miss){setStatus(`${miss.n} ‘${miss.t}’ 조치사항을 입력하세요`);$("act-"+miss.k).focus();return}
   const sig = (workerPad && workerPad.hasInk()) ? workerPad.toDataURL() : (cur?.log?.sig || "");
   if(sig) data.sig=sig;
+  if(data.guard?.last && data.guard.last===data.worker){
+    setStatus("보안점검 1차 점검자는 당직자가 아닌 최종퇴실자를 적어 주세요");showForm("guard");$("g-last").focus();return}
+  const lsig=(lastSigPad&&lastSigPad.hasInk())?lastSigPad.toDataURL():(lastResign?"":(cur?.log?.guard?.lastSig||""));
+  if(lsig){data.guard=data.guard||{};data.guard.lastSig=lsig}
   $("saveBtn").disabled=true;setStatus("저장 중…");
   try{
     await db.ref(`${ROOT}/${data.date}/log`).set(data);
     isDirty=false;lsSet("dutyDraft",null);
     delete sigStrokes["worker-"+data.date];resign=false;renderWorkerSig();
+    delete sigStrokes["last-"+data.date];lastResign=false;renderLastSig();
     setStatus(`${data.date} 저장 · 점검 ${data.roundsDone}/3`+(data.sig?"":" · 마감 후 서명하세요"));
   }catch(e){
     setStatus(e?.code==="PERMISSION_DENIED"?"결재가 끝난 일지이거나 저장 권한이 없습니다.":"저장하지 못했습니다. 연결을 확인하고 다시 누르세요.");
