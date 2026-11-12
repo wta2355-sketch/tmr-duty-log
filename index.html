@@ -244,6 +244,10 @@ textarea.notes{min-height:110px;resize:vertical}
   #printSheet{display:block!important}
 }
 #printSheet.land,.ps-measure.land{width:1047px!important}
+#printSheet.mixed{width:auto!important}
+#printSheet.mixed>.pp{width:718px;overflow:hidden;break-after:page;page-break-after:always}
+#printSheet.mixed>.pp.land{width:1047px;page:land}
+#printSheet.mixed>.pp:last-child{break-after:auto;page-break-after:auto}
 #printSheet,.ps-measure{width:718px;color:#000;background:#fff;font-family:"IBM Plex Sans KR","Malgun Gothic","Apple SD Gothic Neo",sans-serif;font-size:11px;line-height:1.35;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .ps-measure{position:absolute;left:-10000px;top:0;display:block!important}
 .ps h1{font-size:22px;margin:0;letter-spacing:.2em;font-weight:700}
@@ -492,6 +496,7 @@ textarea.notes{min-height:110px;resize:vertical}
         <span style="flex:1"></span>
         <a class="btn small" id="rXlsx" href="roster-template.xlsx" download="당직명령부_요일돌리기.xlsx" style="text-decoration:none">엑셀 양식</a>
         <button class="btn small" id="rPrint">A4 인쇄</button>
+        <button class="btn small" id="rPrintAll">한 달 일지 묶음 인쇄</button>
       </div>
       <div class="pad" id="rAdminBox" hidden style="border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px">
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
@@ -1256,8 +1261,8 @@ function buildGuardPrint(){
     <div class="foot"><span>경주축산농협 TMR사료공장 경비당번 근무일지</span><span>출력 ${esc(fmt(new Date().toISOString()))}</span></div>
   </div>`;
 }
-async function buildCctvPrint(){
-  const base=$("date").value;const [y,m,d]=base.split("-").map(Number);
+async function buildCctvPrint(baseDate){
+  const base=baseDate||$("date").value;const [y,m,d]=base.split("-").map(Number);
   const dt=new Date(y,m-1,d), wd=(dt.getDay()+6)%7;dt.setDate(dt.getDate()-wd);
   const days=[];for(let i=0;i<5;i++){const x=new Date(dt);x.setDate(dt.getDate()+i);days.push(`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,"0")}-${String(x.getDate()).padStart(2,"0")}`)}
   const recs=await Promise.all(days.map(async k=>{try{return (await db.ref(`${ROOT}/${k}`).get()).val()||{}}catch(e){return {}}}));
@@ -1683,6 +1688,62 @@ $("rAuto").addEventListener("click",autoAssign);
 $("rSave").addEventListener("click",saveRoster);
 $("staffSave").addEventListener("click",saveStaff);
 $("rPrint").addEventListener("click",()=>{if(roster)printHTML(buildRosterPrint())});
+/* ---------- 한 달 묶음 인쇄: 명령부 · 근무 현황 · 날짜별 당직일지 · 경비당번 근무일지 · 주별 CCTV 점검일지 ---------- */
+function buildMonthSummary(m,recs){
+  const [y,mo]=m.split("-").map(Number), n=daysIn(m), days=normDays(roster?.days);
+  const hm=v=>v?(v.includes("T")?fmtDT(v):v):"";
+  let rows="";
+  for(let d=1;d<=n;d++){
+    const k=String(d).padStart(2,"0"), date=`${m}-${k}`, w=dow(m,d), L=recs[date]?.log, g=L?.guard||{}, dd=days[k]||{};
+    const off=!L&&(dd.off||w===0||w===6);
+    const name=L?.worker||(off?"휴일":dd.name||"");
+    const sub=dd.sub||(L&&dd.name&&L.worker!==dd.name?`대직 (원 배정 ${dd.name})`:"");
+    rows+=`<tr class="${off?"off":""}"><td class="c">${mo}.${d}</td><td class="c" style="color:${w===0?"#b00":w===6?"#1f4e9a":"#000"}">${DAYS[w]}</td>
+      <td class="c"><b>${esc(name)}</b></td><td class="c">${esc(g.pos||(L?staffPos(L.worker):""))}</td><td class="c">${esc(g["in-from"]||"")}</td>
+      <td class="c">${esc(hm(g.unset))}</td><td class="c">${esc(hm(g.set))}</td><td>${esc([dd.note,sub].filter(Boolean).join(" · "))}</td></tr>`;
+  }
+  return `<div class="ps"><h1 style="text-align:center;letter-spacing:.1em">${y}년 ${mo}월 당직ㆍ경비당번 근무 현황</h1>
+    <div style="text-align:right;margin:4px 0 6px">경주축산농협 TMR사료공장</div>
+    <table class="rt"><tr><th>일자</th><th>요일</th><th>당직자</th><th>직명</th><th>인계자</th><th>세트해제</th><th>기계세트</th><th>비고</th></tr>${rows}</table>
+    <div class="foot"><span>세트해제는 다음 영업일 아침, 기계세트는 당직일 저녁 시각</span><span>출력 ${esc(fmt(new Date().toISOString()))}</span></div></div>`;
+}
+async function printMonthAll(){
+  const m=$("rMonth").value;if(!m)return;
+  const st=$("rStatus");st.textContent="한 달 일지를 모으는 중…";
+  try{
+    const recs=(await db.ref(ROOT).orderByKey().startAt(m+"-01").endAt(m+"-31").get()).val()||{};
+    const dates=Object.keys(recs).filter(d=>recs[d]?.log).sort();
+    const pages=[];
+    if(roster) pages.push({html:buildRosterPrint()});
+    pages.push({html:buildMonthSummary(m,recs)});
+    const keep={cur,photos};
+    for(const d of dates){
+      cur=recs[d];
+      try{photos=(await db.ref(`${PHOTO_ROOT}/${d}`).get()).val()||{}}catch(e){photos={}}
+      pages.push({html:buildPrintHTML()});
+      if(cur.log.guard) pages.push({html:buildGuardPrint()});
+    }
+    cur=keep.cur;photos=keep.photos;
+    const mondays=[...new Set(dates.filter(d=>recs[d].log.cctv).map(d=>{const [y,mo,dd]=d.split("-").map(Number);const x=new Date(y,mo-1,dd);x.setDate(dd-((x.getDay()+6)%7));return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,"0")}-${String(x.getDate()).padStart(2,"0")}`}))].sort();
+    for(const mon of mondays) pages.push({html:await buildCctvPrint(mon),land:true});
+    // 페이지마다 따로 재서 A4 한 장에 맞춤
+    const named=typeof CSS!=="undefined"&&CSS.supports&&CSS.supports("page","land");
+    let out="";
+    for(const p of pages){
+      const mm=document.createElement("div");mm.className="ps-measure"+(p.land?" land":"");mm.innerHTML=p.html;document.body.appendChild(mm);
+      await Promise.all([...mm.querySelectorAll("img")].map(i=>i.complete?0:new Promise(r=>{i.onload=i.onerror=r})));
+      const h=mm.offsetHeight;mm.remove();
+      let z=p.land?(named?Math.min(1,680/h):Math.min(718/1047,990/h)):Math.min(1,990/h);
+      out+=`<div class="pp${p.land&&named?" land":""}"><div style="zoom:${z.toFixed(3)};width:${p.land?1047:718}px">${p.html}</div></div>`;
+    }
+    let ps=$("pageStyle");if(!ps){ps=document.createElement("style");ps.id="pageStyle";document.head.appendChild(ps)}
+    ps.textContent="@page{size:A4 portrait;margin:10mm}@page land{size:A4 landscape;margin:8mm}";
+    const sheet=$("printSheet");sheet.className="mixed";sheet.style.zoom="1";sheet.innerHTML=out;
+    st.textContent=`${pages.length}장을 인쇄합니다 (당직일지 ${dates.length}일)`;
+    setTimeout(()=>window.print(),80);
+  }catch(e){st.textContent="일지를 불러오지 못했습니다. 다시 시도하세요."}
+}
+$("rPrintAll").addEventListener("click",printMonthAll);
 
 /* ---------- 팝업 알림 ----------
    근무자: 공장장·본부장 지시사항 중 아직 '확인' 안 한 것
