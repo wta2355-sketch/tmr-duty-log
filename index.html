@@ -463,6 +463,7 @@ textarea.notes{min-height:110px;resize:vertical}
     <div id="form-cctv" hidden>
       <section class="block">
         <div class="block-h"><h2>CCTV 일일 점검</h2><button type="button" class="btn small lf" id="cc-all">모두 적정</button></div>
+        <div class="pad" style="padding-bottom:0"><label for="cc-who" style="font-weight:600">점검자</label> <input type="text" id="cc-who" class="lf" placeholder="비우면 당직자" style="max-width:10em"></div>
         <div class="pad sub" style="padding-bottom:0">○ 적정(이행) / X 불량(요정비) — 불량이면 조치사항을 적어 주세요. 인쇄는 그 주 월~금이 한 장에 나옵니다.</div>
         <div id="cc-list"></div>
       </section>
@@ -1168,7 +1169,7 @@ function collectExtra(){
   g.items=$("g-items").checked;
   g.sec={};for(const it of SEC_ITEMS) g.sec[it.k]={a:segGet("gs1-"+it.k),b:segGet("gs2-"+it.k)};
   g.events=[...$("g-events").children].map(r=>({t:r.querySelector('[data-f="t"]').value.trim(),c:r.querySelector('[data-f="c"]').value.trim(),a:r.querySelector('[data-f="a"]').value.trim()}));
-  const c={items:{},onoff:segGet("cc-onoff"),login:$("cc-login").value};
+  const c={items:{},onoff:segGet("cc-onoff"),login:$("cc-login").value,who:$("cc-who").value.trim()};
   for(const it of CCTV_ALL){const v=segGet("cc-"+it.k);if(v)c.items["c"+it.k]={r:v,a:v==="X"?$("cca-"+it.k).value.trim():""}}
   return {guard:prune(g)||null, cctv:prune(c)||null};
 }
@@ -1181,7 +1182,7 @@ function fillExtra(d){
   $("g-events").textContent="";
   const evs=Array.isArray(g.events)?g.events:Object.values(g.events||{});
   (evs.length?evs:[{}]).forEach(addEvent);
-  segSet("cc-onoff",c.onoff||"");$("cc-login").value=c.login||"";
+  segSet("cc-onoff",c.onoff||"");$("cc-login").value=c.login||"";$("cc-who").value=c.who||"";
   for(const it of CCTV_ALL){const x=c.items?.["c"+it.k];segSet("cc-"+it.k,x?.r||"");$("cca-"+it.k).value=x?.a||"";ccToggle("cc-"+it.k)}
   syncGuardName();
 }
@@ -1275,7 +1276,7 @@ async function buildCctvPrint(){
   }
   const sig=x=>x?.sig?`<img src="${x.sig}" alt="" style="max-height:28px;max-width:96px">`:"";
   rows+=`<tr><td class="c" rowspan="2"><b>결재</b></td><td class="c">책임자</td>${recs.map(r=>`<td class="c" colspan="2" style="height:32px">${r.log?.cctv?sig(r.review?.manager||r.review?.director):""}</td>`).join("")}</tr>
-    <tr><td class="c">점검자(성명)</td>${recs.map(r=>`<td class="c" colspan="2">${r.log?.cctv?esc(r.log.worker):""}</td>`).join("")}</tr>`;
+    <tr><td class="c">점검자(성명)</td>${recs.map(r=>`<td class="c" colspan="2">${r.log?.cctv?esc(r.log.cctv.who||r.log.worker):""}</td>`).join("")}</tr>`;
   return `<div class="ps cp">
     <h1 style="text-align:center;letter-spacing:.15em;margin-bottom:8px">CCTV 일일 점검일지</h1>
     <table class="ct"><tr><th rowspan="2" style="width:56px">구 분</th><th rowspan="2">점 검 항 목</th>${head}</tr><tr>${sub}</tr>${rows}</table>
