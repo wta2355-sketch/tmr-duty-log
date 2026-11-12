@@ -100,6 +100,13 @@
           ".write": false
         }
       }
+    },
+    "dutySigs": {
+      ".read": "auth != null && (auth.token.email === 'duty@gjtmr.local' || auth.token.email === 'manager@gjtmr.local' || auth.token.email === 'director@gjtmr.local')",
+      "$name": {
+        ".write": "auth != null && (auth.token.email === 'duty@gjtmr.local' || auth.token.email === 'manager@gjtmr.local' || auth.token.email === 'director@gjtmr.local')",
+        ".validate": "$name.length >= 2 && $name.length <= 6 && newData.hasChildren(['sig','at','consent']) && newData.child('consent').val() === true && newData.child('sig').isString() && newData.child('sig').val().beginsWith('data:image/png;base64,') && newData.child('sig').val().length < 80000"
+      }
     }
   }
 }

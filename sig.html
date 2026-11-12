@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>서명 등록 · TMR 당직일지</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap">
+<style>
+:root{--bg:#f4f5f1;--card:#fff;--ink:#1d241f;--muted:#5f6b63;--line:#d5dad3;--accent:#2f5d46;--accent-ink:#fff;--ok:#2f7a4f;--warn:#a5521c;
+  --f:"IBM Plex Sans KR","Malgun Gothic","Apple SD Gothic Neo",sans-serif;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#161a17;--card:#1f2521;--ink:#e6ebe6;--muted:#9aa69e;--line:#36403a;--accent:#6fae8b;--accent-ink:#0f1511;--ok:#7cc79a;--warn:#e19a62;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f);font-size:16px;line-height:1.5}
+main{max-width:560px;margin:0 auto;padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:16px}
+h1{font-size:22px;margin:0}
+.sub{color:var(--muted);font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;gap:12px}
+label{font-weight:600;font-size:14px}
+input[type=password],select{font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);width:100%}
+.btn{font:inherit;font-weight:600;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:10px 14px;cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.names{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.name{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left}
+.name small{font-weight:400;font-size:12px;color:var(--muted)}
+.name.done small{color:var(--ok)}
+.name[aria-pressed=true]{outline:3px solid var(--accent);outline-offset:1px}
+.pad{position:relative;background:#fff;border:2px dashed var(--line);border-radius:10px;height:200px;touch-action:none}
+.pad canvas{width:100%;height:100%;display:block;cursor:crosshair}
+.pad span{position:absolute;inset:0;display:grid;place-items:center;color:#999;pointer-events:none;font-size:20px;letter-spacing:.3em}
+.consent{display:flex;gap:10px;align-items:flex-start;font-size:14px;font-weight:400;background:var(--bg);border-radius:8px;padding:10px}
+.consent input{width:22px;height:22px;flex:none;margin-top:2px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.msg{font-size:14px;min-height:1.4em}
+.msg.err{color:var(--warn)} .msg.ok{color:var(--ok)}
+.saved img{max-width:240px;background:#fff;border:1px solid var(--line);border-radius:6px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>서명 등록</h1>
+    <div class="sub">경주축산농협 TMR사료공장 · 2026년 1~10월 경비당번 근무일지·CCTV 점검일지 (소급 작성분)</div>
+  </header>
+
+  <section class="card" id="loginCard">
+    <label>로그인 계정</label>
+    <div class="seg" id="roleSeg">
+      <button type="button" class="btn" data-r="worker" aria-pressed="true">근무자</button>
+      <button type="button" class="btn" data-r="manager" aria-pressed="false">공장장</button>
+      <button type="button" class="btn" data-r="director" aria-pressed="false">본부장</button>
+    </div>
+    <label for="pw">비밀번호 (당직일지와 같음)</label>
+    <input type="password" id="pw" autocomplete="current-password">
+    <button class="btn primary" id="loginBtn" type="button">로그인</button>
+    <div class="msg" id="loginMsg"></div>
+  </section>
+
+  <section class="card" id="mainCard" hidden>
+    <div>
+      <label>본인 이름을 누르세요</label>
+      <div class="sub">본인 서명은 반드시 본인이 직접 해 주세요.</div>
+    </div>
+    <div class="names" id="names"></div>
+
+    <div id="signArea" hidden>
+      <div class="saved" id="saved"></div>
+      <label id="padLabel">서명</label>
+      <div class="pad" id="pad"><canvas id="cv" aria-label="서명 칸"></canvas><span id="hint">서 명</span></div>
+      <div class="row"><button class="btn" id="clearBtn" type="button">지우기</button></div>
+      <label class="consent"><input type="checkbox" id="agree"><span id="agreeText"></span></label>
+      <button class="btn primary" id="saveBtn" type="button" disabled>서명 등록</button>
+      <div class="msg" id="msg"></div>
+    </div>
+  </section>
+
+  <section class="card" id="exportCard" hidden>
+    <label>등록 현황 내보내기</label>
+    <div class="sub">모두 등록되면 파일을 받아 Claude에게 보내 주세요. 등록한 서명만 해당 사람의 서명란에 들어갑니다.</div>
+    <button class="btn" id="exportBtn" type="button">서명 파일 받기 (.json)</button>
+  </section>
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+const firebaseConfig={apiKey:"AIzaSyCUo98hBrMdV-Cv2k-w5K-d9rY01qdmkuU",authDomain:"tmr-duty-log.firebaseapp.com",databaseURL:"https://tmr-duty-log-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"tmr-duty-log",storageBucket:"tmr-duty-log.firebasestorage.app",messagingSenderId:"648207468713",appId:"1:648207468713:web:86ea42b7da66d90dc581b8"};
+const ACCOUNTS={worker:"duty@gjtmr.local",manager:"manager@gjtmr.local",director:"director@gjtmr.local"};
+const PEOPLE=[["전진국","경비당번"],["이석춘","경비당번"],["정승민","경비당번·CCTV 점검"],["유원규","경비당번"],["최창열","경비당번"],["정해원","공장장·책임자"],["이승익","본부장"]];
+const SCOPE="2026년 1~10월 경비당번 근무일지·CCTV 일일 점검일지(소급 작성분)";
+const $=id=>document.getElementById(id);
+firebase.initializeApp(firebaseConfig);
+const auth=firebase.auth(),db=firebase.database();
+let role="worker",sigs={},who=null;
+
+$("roleSeg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;role=b.dataset.r;
+  $("roleSeg").querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b))});
+$("loginBtn").addEventListener("click",async()=>{
+  $("loginMsg").className="msg";$("loginMsg").textContent="로그인 중…";
+  try{await auth.signInWithEmailAndPassword(ACCOUNTS[role],$("pw").value)}
+  catch(e){$("loginMsg").className="msg err";$("loginMsg").textContent="비밀번호가 맞지 않습니다. 당직일지 비밀번호를 입력하세요."}
+});
+$("pw").addEventListener("keydown",e=>{if(e.key==="Enter")$("loginBtn").click()});
+
+auth.onAuthStateChanged(u=>{
+  const on=!!u;$("loginCard").hidden=on;$("mainCard").hidden=!on;$("exportCard").hidden=!on;
+  if(on) db.ref("dutySigs").on("value",s=>{sigs=s.val()||{};renderNames();if(who)renderSaved()},
+    ()=>{$("msg").className="msg err";$("msg").textContent="서명 목록을 불러오지 못했습니다. 관리자에게 권한 설정을 확인해 달라고 하세요."});
+});
+
+function renderNames(){
+  const box=$("names");box.textContent="";
+  for(const [n,r] of PEOPLE){
+    const b=document.createElement("button");b.type="button";b.className="btn name"+(sigs[n]?" done":"");
+    b.setAttribute("aria-pressed",who===n);
+    const t=document.createElement("span");t.textContent=n;
+    const s=document.createElement("small");s.textContent=sigs[n]?`등록됨 · ${fmt(sigs[n].at)}`:r;
+    b.append(t,s);b.addEventListener("click",()=>pick(n));box.appendChild(b);
+  }
+}
+function fmt(iso){if(!iso)return"";const d=new Date(iso);return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`}
+function pick(n){who=n;renderNames();$("signArea").hidden=false;$("padLabel").textContent=`${n} 서명`;
+  $("agreeText").textContent=`저 ${n}은(는) 이 서명을 직접 했으며, ${SCOPE}의 제 서명란에 이 서명을 넣는 데 동의합니다.`;
+  $("agree").checked=false;clear();$("msg").textContent="";renderSaved();$("pad").scrollIntoView({behavior:"smooth",block:"center"})}
+function renderSaved(){const box=$("saved");box.textContent="";const x=sigs[who];if(!x)return;
+  const p=document.createElement("div");p.className="sub";p.textContent=`이미 등록된 서명 (${fmt(x.at)}) · 다시 서명하면 바뀝니다`;
+  const im=document.createElement("img");im.src=x.sig;im.alt=`${who} 등록된 서명`;box.append(p,im)}
+
+/* 서명 패드 */
+const cv=$("cv"),ctx=cv.getContext("2d");let strokes=[],cur=null;
+function size(){const r=cv.getBoundingClientRect(),d=devicePixelRatio||1;cv.width=r.width*d;cv.height=r.height*d;ctx.setTransform(d,0,0,d,0,0);draw()}
+function paint(g,w,h){g.strokeStyle="#111";g.lineWidth=Math.max(2.4,w/140);g.lineCap="round";g.lineJoin="round";
+  for(const s of strokes){g.beginPath();s.forEach(([x,y],i)=>i?g.lineTo(x*w,y*h):g.moveTo(x*w,y*h));if(s.length===1)g.lineTo(s[0][0]*w+.1,s[0][1]*h);g.stroke()}}
+function draw(){const r=cv.getBoundingClientRect();ctx.clearRect(0,0,r.width,r.height);paint(ctx,r.width,r.height);$("hint").hidden=strokes.length>0;upd()}
+const pt=e=>{const b=cv.getBoundingClientRect();return[(e.clientX-b.left)/b.width,(e.clientY-b.top)/b.height]};
+cv.addEventListener("pointerdown",e=>{e.preventDefault();cv.setPointerCapture(e.pointerId);cur=[pt(e)];strokes.push(cur);draw()});
+cv.addEventListener("pointermove",e=>{if(!cur)return;e.preventDefault();cur.push(pt(e));draw()});
+["pointerup","pointercancel"].forEach(t=>cv.addEventListener(t,()=>{cur=null}));
+function clear(){strokes=[];requestAnimationFrame(size)}
+$("clearBtn").addEventListener("click",()=>{strokes=[];draw()});
+addEventListener("resize",()=>{if(!$("signArea").hidden)size()});
+const ink=()=>strokes.reduce((a,s)=>a+s.length,0)>8;
+function upd(){$("saveBtn").disabled=!(who&&ink()&&$("agree").checked)}
+$("agree").addEventListener("change",upd);
+
+$("saveBtn").addEventListener("click",async()=>{
+  const o=document.createElement("canvas");o.width=360;o.height=140;paint(o.getContext("2d"),360,140);
+  const data={sig:o.toDataURL("image/png"),at:new Date().toISOString(),consent:true,scope:SCOPE,by:auth.currentUser?.email||""};
+  $("saveBtn").disabled=true;$("msg").className="msg";$("msg").textContent="저장 중…";
+  try{await db.ref("dutySigs/"+who).set(data);$("msg").className="msg ok";$("msg").textContent=`${who} 서명이 등록되었습니다.`;strokes=[];draw();$("agree").checked=false}
+  catch(e){$("msg").className="msg err";$("msg").textContent="저장하지 못했습니다. 권한 설정이 아직 안 되었을 수 있습니다.";upd()}
+});
+
+$("exportBtn").addEventListener("click",()=>{
+  const blob=new Blob([JSON.stringify(sigs,null,1)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`서명등록_${new Date().toISOString().slice(0,10)}.json`;a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+});
+</script>
+</body>
+</html>
