@@ -1434,6 +1434,8 @@ $("printBtn").addEventListener("click",printLog);
    dutyRoster/YYYY-MM = {days:{"01":{name,off,note}}, updatedAt}  담당자만 수정 */
 let staffPosList=[];
 function staffPos(n){const i=staff.indexOf(n);return i>=0?(staffPosList[i]||""):""}
+let dutySigs={}, sigsLoaded=false;
+const rosterSig=n=>dutySigs[n]?.rosterConsent?dutySigs[n].sig:"";   // 본인이 명령부 사용에 동의한 등록 서명만
 let staff=[], rosterRef=null, staffRef=null, roster=null, rDirty=false, rLogs={}, rLogRef=null;
 const isAdmin=()=>!!role;   // 근무자·공장장·본부장 누구나 명령부 작성·수정
 function daysIn(m){const [y,mo]=m.split("-").map(Number);return new Date(y,mo,0).getDate()}
@@ -1463,6 +1465,7 @@ function watchRoster(m){
     renderRoster();
   },()=>{$("rStatus").textContent="명령부를 불러오지 못했습니다."});
   rLogRef=db.ref(ROOT).orderByKey().startAt(m+"-01").endAt(m+"-31");
+  if(!sigsLoaded){sigsLoaded=true;db.ref("dutySigs").on("value",x=>{dutySigs=x.val()||{}},()=>{})}
   rLogRef.on("value",snap=>{rLogs=snap.val()||{};renderRoster()},()=>{});
 }
 function watchStaff(){
@@ -1660,9 +1663,9 @@ function buildRosterPrint(){
     const w=dow(m,Number(k)), date=`${m}-${k}`, rec=rLogs[date]||{}, L=rec.log, rv=rec.review||{};
     const sub=daySub(dd,L);
     if(dd.off){rows+=`<tr class="hol"><td class="c">${+m.slice(5)}/${Number(k)}</td><td class="c" style="color:${w===6?"#1f4e9a":"#b00"}">${DAYS[w]}</td><td class="c">기계<br>경비</td>
-      <td class="c">${esc(staffPos(dd.name))}</td><td class="c">${esc(dd.name)}${dd.note?`<div style="font-size:8.5px;color:#555">${esc(dd.note)}</div>`:""}</td><td class="c"></td>
+      <td class="c">${esc(staffPos(dd.name))}</td><td class="c">${esc(dd.name)}${dd.note?`<div style="font-size:8.5px;color:#555">${esc(dd.note)}</div>`:""}</td><td class="c">${img(rosterSig(dd.name))}</td>
       <td class="c">${img(ap.manager?.sig)}</td><td class="c">${img(ap.director?.sig)}</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>`;continue}
-    const mainSig= L?.sig && L.worker===dd.name ? L.sig : "";
+    const mainSig= (L?.sig && L.worker===dd.name ? L.sig : "") || rosterSig(dd.name);
     const subSig = sub && L?.sig && L.worker===sub ? L.sig : "";
     const subAppr= sub ? (rv.manager?.sig||rv.director?.sig||"") : "";
     rows+=`<tr><td class="c">${+m.slice(5)}/${Number(k)}</td><td class="c">${DAYS[w]}</td><td class="c">당직</td>
