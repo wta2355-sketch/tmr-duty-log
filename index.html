@@ -284,6 +284,7 @@ textarea.notes{min-height:110px;resize:vertical}
 .ps.gp .appr td{height:42px}
 .ps.cp .ct th,.ps.cp .ct td{padding:2px 4px;font-size:10px}
 .ps.rp .rq th,.ps.rp .rq td{padding:2px 4px;height:28px;font-size:11px}
+.ps.rp .rq tr.hol td{background:#f3f3f3}
 .ps.rp td.c{text-align:center}
 .ps .foot{margin-top:6px;font-size:9px;color:#444;display:flex;justify-content:space-between}
 </style>
@@ -1521,9 +1522,9 @@ function renderRoster(){
         sel.addEventListener("change",()=>{dd.sub=sel.value;rTouch()});
       }else{
         const opts=["",...staff];if(dd.name&&!staff.includes(dd.name))opts.push(dd.name);
-        opts.forEach(n=>{const o=document.createElement("option");o.value=n;o.textContent=n||(dd.off?"휴무":"— 선택 —");sel.appendChild(o)});
+        opts.forEach(n=>{const o=document.createElement("option");o.value=n;o.textContent=dd.off?(n?`휴무 · 경비 ${n}`:"휴무"):(n||"— 선택 —");sel.appendChild(o)});
         sel.value=dd.name||"";sel.disabled=dd.off;
-        sel.addEventListener("change",()=>{dd.name=sel.value;rTouch()});
+        sel.addEventListener("change",()=>{dd.name=sel.value;fillOffGuards();rTouch()});
       }
       c2.appendChild(sel);
       const ni=document.createElement("input");ni.type="text";ni.value=dd.note||"";ni.placeholder=dd.off?"예) 공휴일":"";
@@ -1531,7 +1532,7 @@ function renderRoster(){
       ni.style.marginTop="4px";ni.style.fontSize="13px";ni.placeholder=dd.off?"비고 (예: 공휴일)":"비고";
       c2.appendChild(ni);
     }else{
-      c2.textContent=dd.off?"휴무":(dd.name||"미배정")+(sub?` → 대직 ${sub}`:"");
+      c2.textContent=dd.off?(dd.name?`휴무 · 경비 ${dd.name}`:"휴무"):(dd.name||"미배정")+(sub?` → 대직 ${sub}`:"");
       if(!dd.off&&!dd.name)c2.style.color="var(--muted)";
       c3.textContent=dd.note||"";c3.style.fontSize="13px";
     }
@@ -1539,7 +1540,7 @@ function renderRoster(){
     if(admin){
       const c4=document.createElement("td");c4.className="off";
       const cb=document.createElement("input");cb.type="checkbox";cb.checked=!!dd.off;cb.setAttribute("aria-label",`${k}일 휴무`);
-      cb.addEventListener("change",()=>{dd.off=cb.checked;if(dd.off)dd.name="";rTouch()});
+      cb.addEventListener("change",()=>{dd.off=cb.checked;if(!dd.off)dd.name="";fillOffGuards();rTouch()});
       c4.appendChild(cb);tr.appendChild(c4);
     }
     const c5=document.createElement("td");c5.className="st";
@@ -1600,6 +1601,13 @@ function renderRosterApprove(){
     }else{const s=document.createElement("div");s.className="sub";s.textContent="아직 결재 전입니다.";box.appendChild(s)}
   }
 }
+// 휴무일(주말·공휴일) 경비당번 = 바로 앞 근무일 당직자. 달 첫머리 휴무일은 이미 적힌 이름(전달 마지막 당직자)을 둠
+function fillOffGuards(){
+  if(!roster?.days)return;let last="";
+  for(const k of Object.keys(roster.days).sort()){const dd=roster.days[k];
+    if(!dd.off){last=dd.name||"";continue}
+    if(last)dd.name=last;}
+}
 function rTouch(rerender=true){rDirty=true;$("rStatus").textContent="수정 중 · 저장 전";if(rerender)renderRoster()}
 async function autoAssign(){
   const typed=staffParse().map(x=>x.p?`${x.n}, ${x.p}`:x.n);
@@ -1610,10 +1618,11 @@ async function autoAssign(){
   const rotate=$("rRotate").checked && N>=3;   // 2명 이하는 밀면 연속 근무가 생겨서 제외
   let pos=0, shift=0;
   for(const k of Object.keys(roster.days).sort()){
-    const dd=roster.days[k];if(dd.off){dd.name="";continue}
+    const dd=roster.days[k];if(dd.off)continue;
     dd.name=staff[(s0+shift+pos)%N];
     if(++pos===N){pos=0;if(rotate)shift++}     // 한 바퀴 돌면 시작을 한 명 밀기
   }
+  fillOffGuards();
   setTimeout(()=>{$("rStatus").textContent="자동배정했습니다 · 확인 후 '명령부 저장'을 누르세요"},0);
   rTouch();
 }
@@ -1647,9 +1656,12 @@ function buildRosterPrint(){
   const img=(src,h=22)=>src?`<img src="${src}" alt="" style="max-height:${h}px;max-width:70px;display:block;margin:0 auto">`:"";
   let rows="";
   for(const k of Object.keys(roster.days).sort()){
-    const dd=roster.days[k];if(dd.off)continue;
+    const dd=roster.days[k];if(dd.off&&!dd.name)continue;
     const w=dow(m,Number(k)), date=`${m}-${k}`, rec=rLogs[date]||{}, L=rec.log, rv=rec.review||{};
     const sub=daySub(dd,L);
+    if(dd.off){rows+=`<tr class="hol"><td class="c">${+m.slice(5)}/${Number(k)}</td><td class="c" style="color:${w===6?"#1f4e9a":"#b00"}">${DAYS[w]}</td><td class="c">기계<br>경비</td>
+      <td class="c">${esc(staffPos(dd.name))}</td><td class="c">${esc(dd.name)}${dd.note?`<div style="font-size:8.5px;color:#555">${esc(dd.note)}</div>`:""}</td><td class="c"></td>
+      <td class="c">${img(ap.manager?.sig)}</td><td class="c">${img(ap.director?.sig)}</td><td class="c"></td><td class="c"></td><td class="c"></td><td class="c"></td></tr>`;continue}
     const mainSig= L?.sig && L.worker===dd.name ? L.sig : "";
     const subSig = sub && L?.sig && L.worker===sub ? L.sig : "";
     const subAppr= sub ? (rv.manager?.sig||rv.director?.sig||"") : "";
@@ -1660,7 +1672,7 @@ function buildRosterPrint(){
   }
   return `<div class="ps rp">
     <h1 style="text-align:center;letter-spacing:.12em;text-decoration:underline;text-underline-offset:4px;margin-bottom:4px">당직ㆍ경비당번 명령부</h1>
-    <div style="display:flex;justify-content:space-between;margin:8px 0 4px"><span>${esc(m.replace("-","년 "))}월 · 경주축산농협 TMR사료공장</span><span>근무시간 19:00 ~ 22:00 (평일)</span></div>
+    <div style="display:flex;justify-content:space-between;margin:8px 0 4px"><span>${esc(m.replace("-","년 "))}월 · 경주축산농협 TMR사료공장</span><span>당직 19:00 ~ 22:00 (평일) · 휴일은 전날 당직자가 기계경비</span></div>
     <table class="rq">
       <tr><th rowspan="2" style="width:44px">월 일</th><th rowspan="2" style="width:30px">요일</th><th rowspan="2" style="width:34px">구분</th><th colspan="3">경비당번</th><th colspan="2">결재</th><th colspan="3">대 직 자</th><th rowspan="2" style="width:56px">대 직<br>결 재</th></tr>
       <tr><th style="width:44px">직</th><th>성명</th><th style="width:56px">인</th><th style="width:56px">관리<br>책임자</th><th style="width:56px">명령<br>권자</th><th style="width:44px">직</th><th>성 명</th><th style="width:56px">인</th></tr>
@@ -1697,10 +1709,11 @@ function buildMonthSummary(m,recs){
     const k=String(d).padStart(2,"0"), date=`${m}-${k}`, w=dow(m,d), L=recs[date]?.log, g=L?.guard||{}, dd=days[k]||{};
     const off=!L&&(dd.off||w===0||w===6);
     const name=L?.worker||(off?"휴일":dd.name||"");
+    const guardNote=off&&dd.name?`경비 ${dd.name}`:"";
     const sub=dd.sub||(L&&dd.name&&L.worker!==dd.name?`대직 (원 배정 ${dd.name})`:"");
     rows+=`<tr class="${off?"off":""}"><td class="c">${mo}.${d}</td><td class="c" style="color:${w===0?"#b00":w===6?"#1f4e9a":"#000"}">${DAYS[w]}</td>
       <td class="c"><b>${esc(name)}</b></td><td class="c">${esc(g.pos||(L?staffPos(L.worker):""))}</td><td class="c">${esc(g["in-from"]||"")}</td>
-      <td class="c">${esc(hm(g.unset))}</td><td class="c">${esc(hm(g.set))}</td><td>${esc([dd.note,sub].filter(Boolean).join(" · "))}</td></tr>`;
+      <td class="c">${esc(hm(g.unset))}</td><td class="c">${esc(hm(g.set))}</td><td>${esc([dd.note,guardNote,sub].filter(Boolean).join(" · "))}</td></tr>`;
   }
   return `<div class="ps"><h1 style="text-align:center;letter-spacing:.1em">${y}년 ${mo}월 당직ㆍ경비당번 근무 현황</h1>
     <div style="text-align:right;margin:4px 0 6px">경주축산농협 TMR사료공장</div>
