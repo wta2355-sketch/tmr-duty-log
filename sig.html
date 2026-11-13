@@ -38,6 +38,7 @@ input[type=password],select{font:inherit;padding:10px 12px;border:1px solid var(
 .row{display:flex;gap:8px;flex-wrap:wrap}
 .msg{font-size:14px;min-height:1.4em}
 .msg.err{color:var(--warn)} .msg.ok{color:var(--ok)}
+.saved{display:grid;gap:8px;justify-items:start}
 .saved img{max-width:240px;background:#fff;border:1px solid var(--line);border-radius:6px}
 </style>
 </head>
@@ -70,12 +71,14 @@ input[type=password],select{font:inherit;padding:10px 12px;border:1px solid var(
 
     <div id="signArea" hidden>
       <div class="saved" id="saved"></div>
+      <div id="redraw" style="display:grid;gap:12px">
       <label id="padLabel">서명</label>
       <div class="pad" id="pad"><canvas id="cv" aria-label="서명 칸"></canvas><span id="hint">서 명</span></div>
       <div class="row"><button class="btn" id="clearBtn" type="button">지우기</button></div>
       <label class="consent"><input type="checkbox" id="agree"><span id="agreeText"></span></label>
       <label class="consent"><input type="checkbox" id="agree2"><span id="agree2Text"></span></label>
       <button class="btn primary" id="saveBtn" type="button" disabled>서명 등록</button>
+      </div>
       <div class="msg" id="msg"></div>
     </div>
   </section>
@@ -130,17 +133,20 @@ function pick(n){who=n;renderNames();$("signArea").hidden=false;$("padLabel").te
   $("agreeText").textContent=`저 ${n}은(는) 이 서명을 직접 했으며, ${SCOPE}의 제 서명란에 이 서명을 넣는 데 동의합니다.`;
   $("agree2Text").textContent=`(선택) 2026년 당직ㆍ경비당번 명령부의 제 이름 옆 '인'란에도 이 서명을 넣는 데 동의합니다.`;
   $("agree2").checked=!!sigs[n]?.rosterConsent;
-  $("agree").checked=false;clear();$("msg").textContent="";renderSaved();$("pad").scrollIntoView({behavior:"smooth",block:"center"})}
-function renderSaved(){const box=$("saved");box.textContent="";const x=sigs[who];if(!x)return;
+  $("redraw").hidden=!!sigs[n];
+  $("agree").checked=false;clear();$("msg").textContent="";renderSaved();$("signArea").scrollIntoView({behavior:"smooth",block:"start"})}
+function renderSaved(){const box=$("saved");box.textContent="";const x=sigs[who];if(!x){$("redraw").hidden=false;return}
   const p=document.createElement("div");p.className="sub";p.textContent=`이미 등록된 서명 (${fmt(x.at)}) · 다시 서명하면 바뀝니다`;
   const im=document.createElement("img");im.src=x.sig;im.alt=`${who} 등록된 서명`;box.append(p,im);
   const st=document.createElement("div");st.className="sub";st.textContent=x.rosterConsent?"명령부 '인'란 사용: 동의함":"명령부 '인'란 사용: 동의 안 함";box.append(st);
-  const b=document.createElement("button");b.type="button";b.className="btn";
+  const b=document.createElement("button");b.type="button";b.className=x.rosterConsent?"btn":"btn primary";
   b.textContent=x.rosterConsent?"명령부 사용 동의 철회":"서명은 그대로 두고 명령부 사용에 동의";
   b.addEventListener("click",async()=>{b.disabled=true;
     try{await db.ref("dutySigs/"+who).update({rosterConsent:!x.rosterConsent,rosterAt:new Date().toISOString()});$("msg").className="msg ok";$("msg").textContent=x.rosterConsent?"명령부 사용 동의를 철회했습니다.":"명령부 '인'란 사용에 동의했습니다."}
     catch(e){$("msg").className="msg err";$("msg").textContent="저장하지 못했습니다.";b.disabled=false}});
-  box.append(b)}
+  const r=document.createElement("button");r.type="button";r.className="btn";r.textContent=$("redraw").hidden?"서명 다시 하기":"다시 서명 취소";
+  r.addEventListener("click",()=>{$("redraw").hidden=!$("redraw").hidden;renderSaved();if(!$("redraw").hidden)requestAnimationFrame(size)});
+  box.append(b,r)}
 
 /* 서명 패드 */
 const cv=$("cv"),ctx=cv.getContext("2d");let strokes=[],cur=null;
